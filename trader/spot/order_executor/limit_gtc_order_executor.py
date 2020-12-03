@@ -20,6 +20,21 @@ class StopWatch:
         return datetime.now() - self.started_at > self.timeout
 
 
+class OrderNotCancelledError(RuntimeError):
+    """
+    订单没有正确取消的错误
+
+    发生在已经下单，但是没有成功取消订单的情况（比如：在币安平台，取消订单时查询订单id不存在）
+    """
+
+    def __init__(self, order: Order, origin_exception: Exception):
+        """
+
+        """
+        self.order = order
+        self.origin_exception = origin_exception
+
+
 class LimitGtcOrderExecutor(OrderExecutor):
     def __init__(self, spot_api: SpotApi, order_query_interval: timedelta, order_cancel_timeout: timedelta):
         self.spot_api = spot_api
@@ -37,15 +52,18 @@ class LimitGtcOrderExecutor(OrderExecutor):
         if order.status.is_completed():
             return order
 
-        # 设置取消超时时间
-        stopwatch = StopWatch(self.order_cancel_timeout)
-        while not stopwatch.is_timeout():
-            # 查询订单
-            time.sleep(self.order_query_interval.total_seconds())
-            order: Order = self.spot_api.query_order(coin_pair=coin_pair, order_id=order.order_id)
-            if order.status.is_completed():
-                return order
+        try:
+            # 设置取消超时时间
+            stopwatch = StopWatch(self.order_cancel_timeout)
+            while not stopwatch.is_timeout():
+                # 查询订单
+                time.sleep(self.order_query_interval.total_seconds())
+                order: Order = self.spot_api.query_order(coin_pair=coin_pair, order_id=order.order_id)
+                if order.status.is_completed():
+                    return order
 
-        # 超时后取消订单
-        order: Order = self.spot_api.cancel_order(coin_pair=coin_pair, order_id=order.order_id)
-        return order
+            # 超时后取消订单
+            order: Order = self.spot_api.cancel_order(coin_pair=coin_pair, order_id=order.order_id)
+            return order
+        except Exception as e:
+            raise OrderNotCancelledError(order, e)
