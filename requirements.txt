@@ -2,3 +2,4 @@ requests
 dateparser
 sqlalchemy
 pytest
+python-telegram-bot
