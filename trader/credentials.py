@@ -19,6 +19,10 @@ class Credentials:
     def __repr__(self):
         return self.display
 
+    @staticmethod
+    def create_blank_credentials():
+        return Credentials(api_key='', secret_key='', passphrase='')
+
     @classmethod
     def load_from_json(cls, path: Path) -> "Credentials":
         d = json.loads(path.read_text())

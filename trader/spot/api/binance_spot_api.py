@@ -9,6 +9,7 @@ from trader.credentials import Credentials
 from trader.spot.api.spot_api import SpotApi
 from trader.spot.types import CoinPair, OrderSide, TimeInForce, SpotInstrumentInfo, Trade
 from trader.spot.types.book_ticker import BookTicker
+from trader.spot.types.kline import KlinePeriod, Bar
 from trader.spot.types.order_types import Order, OrderStatus, OrderType
 from trader.third_party.binance.client import Client
 from trader.third_party.binance.exceptions import BinanceAPIException
@@ -56,10 +57,12 @@ class RetryBinanceClient:
 
 class BinanceSpotApi(SpotApi):
 
-    def __init__(self, credentials: Credentials):
+    def __init__(self, credentials: Credentials = None):
         super().__init__(credentials)
         # 针对慢速网格（通过代理访问服务器）时的签名接口时间戳的调整
         slow_network_adjust_ms = os.getenv("BINANCE_SLOW_NETWORK_ADJUST_MS", 1000)
+
+        credentials = credentials if credentials is not None else Credentials.create_blank_credentials()
         self.client = Client(api_key=credentials.api_key,
                              api_secret=credentials.secret_key,
                              slow_network_adjust_ms=slow_network_adjust_ms)
@@ -463,3 +466,54 @@ class BinanceSpotApi(SpotApi):
                   is_best_match=r['isBestMatch']
                   )
             for r in resp]
+
+    def _convert_kline_period(self, period: KlinePeriod) -> str:
+        return {
+
+            KlinePeriod.MIN1: self.client.KLINE_INTERVAL_1MINUTE,
+            KlinePeriod.MIN5: self.client.KLINE_INTERVAL_5MINUTE,
+            KlinePeriod.MIN15: self.client.KLINE_INTERVAL_15MINUTE,
+            KlinePeriod.MIN30: self.client.KLINE_INTERVAL_30MINUTE,
+            KlinePeriod.HOUR1: self.client.KLINE_INTERVAL_1HOUR,
+            KlinePeriod.HOUR4: self.client.KLINE_INTERVAL_4HOUR,
+            KlinePeriod.HOUR8: self.client.KLINE_INTERVAL_8HOUR,
+            KlinePeriod.DAY1: self.client.KLINE_INTERVAL_1DAY,
+            KlinePeriod.WEEK1: self.client.KLINE_INTERVAL_1WEEK,
+        }.get(period)
+
+    def get_kline(self, coin_pair: CoinPair, period: KlinePeriod) -> List[Bar]:
+        log.debug(f"获取K线数据 {coin_pair}, {period}")
+        resp = self.client.get_klines(
+            symbol=self._coin_pair_to_symbol(coin_pair),
+            interval=self._convert_kline_period(period),
+        )
+        log.debug(f"get_kline resp: {resp}")
+
+        # 响应格式
+        # [
+        #         [
+        #             1499040000000,      # Open time
+        #             "0.01634790",       # Open
+        #             "0.80000000",       # High
+        #             "0.01575800",       # Low
+        #             "0.01577100",       # Close
+        #             "148976.11427815",  # Volume
+        #             1499644799999,      # Close time
+        #             "2434.19055334",    # Quote asset volume
+        #             308,                # Number of trades
+        #             "1756.87402397",    # Taker buy base asset volume
+        #             "28.46694368",      # Taker buy quote asset volume
+        #             "17928899.62484339" # Can be ignored
+        #         ]
+        # ]
+        return [
+            Bar(
+                time=self._convert_binance_datetime(r[6]),
+                open=parse_decimal(r[1]),
+                high=parse_decimal(r[2]),
+                low=parse_decimal(r[3]),
+                close=parse_decimal(r[4]),
+                volume=parse_decimal(r[5])
+            )
+            for r in resp
+        ]

@@ -9,19 +9,6 @@ min_price_gap_pct = 0.005  # 最小价格间隔百分比（小于这个间隔就
 min_price_size = Decimal("0.001")
 
 
-@dataclass
-class Bar:
-    time: datetime
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
-    volume: Decimal
-
-    @property
-    def avg_price(self):
-        result = (self.high + self.low + self.close) / 3
-        return result.quantize(min_price_size, ROUND_DOWN)
 
 
 bars: List[Bar] = []
