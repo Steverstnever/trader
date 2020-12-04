@@ -77,6 +77,17 @@ class BinanceSpotApi(SpotApi):
         """
         return coin_pair.asset_symbol + coin_pair.cash_symbol
 
+    def get_products(self) -> List[CoinPair]:
+        log.debug(f"get_products")
+        resp = self.client.get_exchange_info()
+        # 响应格式
+        # from pprint import pprint
+        # pprint(resp)
+        return [
+            CoinPair(asset_symbol=symbol_info['baseAsset'], cash_symbol=symbol_info['quoteAsset'])
+            for symbol_info in resp['symbols'] if symbol_info['status'] == 'TRADING'
+        ]
+
     def get_instrument_info(self, coin_pair: CoinPair) -> SpotInstrumentInfo:
         log.debug(f"get_instrument_info {coin_pair}")
         symbol = self._coin_pair_to_symbol(coin_pair)
