@@ -33,6 +33,7 @@ class LoggerNotifier(Notifier):
 class TgNotifier(Notifier):
     """
     telegram 通知
+    获取chat_id的地址https://api.telegram.org/bot{YourBOTToken}/getUpdates
     """
 
     def __init__(self, token: str, chat_id: int):
