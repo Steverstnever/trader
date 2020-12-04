@@ -15,6 +15,7 @@ class TimeInForce(Enum):
     GTC = "Good-Till-Cancel"
     FOK = "Fill-Or-Kill"
     IOC = "Immediate-Or-Cancel"
+    GTX = "Good-Till-Crossing"  # 无法成为挂单方就撤销, 也叫 POST-ONLY/ MAKER
 
 
 class OrderType(Enum):
