@@ -288,7 +288,7 @@ class GridStrategyApp(StrategyApp):
     def __init__(self, config: GridStrategyConfig, credentials: Credentials):
         # 创建上下文
         notifier = LoggerNotifier()
-        store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO: 配置
+        store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO：避免硬编码
         context = GridStrategyContext(notifier=notifier, store=store)
 
         # 创建现货接口
