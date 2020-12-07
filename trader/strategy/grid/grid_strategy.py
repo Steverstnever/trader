@@ -1,4 +1,5 @@
 import logging
+import json
 from dataclasses import dataclass
 from datetime import timedelta, datetime
 from decimal import Decimal
@@ -19,6 +20,7 @@ from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
 from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
 from trader.strategy.grid.grid_position_manager import GridPositionManager, GridGenerator
 from trader.strategy.grid.grid_strategy_adapter import GridStrategyAdapter
+from trader.strategy.grid.grid_generators import ConfigGridGenerator
 from trader.strategy.runner.timer import TimerEvent, TimerRunner
 from trader.strategy.trade_crawler import TradeCrawler
 
@@ -56,8 +58,38 @@ class GridStrategyConfig:
 
         Returns:
             网格策略的配置
+
+        文件内容example:
+        {
+            "exchange":"BINANCE",
+            "generator":"/path/grid.json",
+            "coin_pair":"BTC$USDT",
+            "enter_trigger_price":"0", option
+            "stop_on_exit":true, option
+            "level_min_profit":"0.005", option
+            "order_query_interval":1, option
+            "order_cancel_timeout":5 option
+        }
         """
-        # TODO: 完成从json中加载配置
+        content = json.loads(path.read_bytes())
+        params = dict()
+        try:
+            params["exchange"] = getattr(Exchange, content["exchange"])
+        except AttributeError:
+            raise RuntimeError("exchange is not existed")
+        params["coin_pair"] = CoinPair.from_symbol(content["coin_pair"])
+        params["generator"] = ConfigGridGenerator(Path(content["generator"]))
+        if content.get("enter_trigger_price"):
+            params["enter_trigger_price"] = Decimal(content["enter_trigger_price"])
+        if content.get("stop_on_exit") is not None:
+            params["stop_on_exit"] = content["stop_on_exit"]
+        if content.get("level_min_profit"):
+            level_min_profit = Decimal(content["level_min_profit"])
+        if content.get("order_query_interval") is not None:
+            params["order_query_interval"] = timedelta(seconds=content["order_query_interval"])
+        if content.get("order_cancel_timeout") is not None:
+            params["order_cancel_timeout"] = timedelta(seconds=content["order_cancel_timeout"])
+        return cls(**params)
 
 
 class GridStrategyContext(StrategyContext):
