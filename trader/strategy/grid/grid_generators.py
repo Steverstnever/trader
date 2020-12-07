@@ -6,6 +6,22 @@ from pathlib import Path
 from typing import List
 
 from trader.strategy.grid.grid_position_manager import GridGenerator, Level
+from trader.utils import is_descending
+
+
+def assert_grid_levels(levels: List[Level]):
+    # 判断网格是严格递降（降序）的
+    assert is_descending([level.high_price for level in levels]), "网格的价格必须是严格降序的"
+
+    # 判断网格的最大仓位都是正值
+    assert all([level.max_position > 0 for level in levels]), "网格中的所有仓位必须都是正值"
+
+    # 判断网格是连续的（前一个网格的下限等于下一个网格的上限）
+    level = levels[0]
+    for lvl in levels[1:]:
+        assert level.low_price == lvl.high_price \
+               or math.isclose(float(level.low_price), float(lvl.high_price)), "网格必须是连续的，前一个网格的下线等于后一个网格的上线"
+        level = lvl
 
 
 class AlgorithmGridGenerator(GridGenerator, ABC):
@@ -72,18 +88,23 @@ class GeometricGridGenerator(AlgorithmGridGenerator):
         super().__init__(support_price, resistance_price, number_of_levels, max_position_per_level)
 
     @property
-    def common_factor(self):
-        return 1 if self.number_of_levels == 1 \
-            else math.pow(self.resistance_price / self.support_price, 1 / (self.number_of_levels - 1))
+    def common_factor(self) -> Decimal:
+        return Decimal(1) if self.number_of_levels == 1 \
+            else Decimal(math.pow(self.resistance_price / self.support_price, 1 / self.number_of_levels))
 
     def generate(self) -> List[Level]:
         """从高到低等比网格，价格高时，每格价差大"""
         result: List[Level] = []
         high_price = self.resistance_price
-        while high_price > self.support_price:
-            low_price = high_price / Decimal.from_float(self.common_factor)
+        counter = 0
+        while counter < self.number_of_levels:  # BUGFIX: 由于精度的问题, 此处不能使用 while high_price > self.support_price:
+            low_price = high_price / self.common_factor
+            # print(f"common factor: {self.common_factor}, {low_price} => {high_price}")
             result.append(Level(low_price, high_price, self.max_position_per_level))
             high_price = low_price
+            counter += 1
+
+        assert_grid_levels(result)
         return result
 
     def description(self) -> str:
@@ -104,6 +125,8 @@ class MixedGridGenerator(GridGenerator):
             levels = g.generate()
             result.extend(levels)
             last_support_price = g.support_price
+
+        assert_grid_levels(result)
         return result
 
     def description(self) -> str:
@@ -122,6 +145,8 @@ class ConfigGridGenerator(GridGenerator):
             low_price, high_price, max_pos = row
             result.append(
                 Level(low_price=Decimal(low_price), high_price=Decimal(high_price), max_position=Decimal(max_pos)))
+
+        assert_grid_levels(result)
         return result
 
     def description(self) -> str:
