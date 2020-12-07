@@ -10,6 +10,7 @@ from trader.credentials import Credentials
 from trader.notifier import Notifier, LoggerNotifier
 from trader.spot.api.exchange import Exchange
 from trader.spot.api.spot_api import SpotApi
+from trader.spot.order_executor.limit_gtc_order_executor import OrderNotCancelledError
 from trader.spot.types import CoinPair
 from trader.spot.types.account_snapshot import AccountSnapshot
 from trader.spot.types.book_ticker import BookTicker
@@ -91,9 +92,22 @@ class GridStrategyConfig:
         return cls(**params)
 
 
+class GridStrategyContext(StrategyContext):
+
+    def __init__(self, notifier: Notifier, store: StrategyStore):
+        self.notifier = notifier if notifier is not None else LoggerNotifier()
+        self.store = store
+
+    def get_notifier(self) -> Notifier:
+        return self.notifier
+
+    def get_store(self) -> StrategyStore:
+        return self.store
+
+
 class GridStrategy(Strategy):
 
-    def __init__(self, config: GridStrategyConfig, context: "GridStrategyContext", spot_api: SpotApi):
+    def __init__(self, config: GridStrategyConfig, context: GridStrategyContext, spot_api: SpotApi):
         super().__init__(context)
 
         self.config = config
@@ -116,8 +130,18 @@ class GridStrategy(Strategy):
         # 是否策略已经停止
         self.stopped = False
 
+        # 需要重新初始化（比如订单取消（cancel_order）出错的时候）
+        self._require_reinitialized = False
+
     def initialize(self):
+        if self._require_reinitialized:
+            log.info("当前状态出错，需要取消所有订单并重新初始化")
+            self.adapter.cancel_all_orders(self.coin_pair)
+            # 本次初始化完成，不需要再次初始化
+            self._require_reinitialized = False
+
         log.info(f"【网格策略】初始化".center(80, '*'))
+        self.position_manager.clear_positions()  # 清除所有现有网格仓位
         asset_qty, _ = self.adapter.get_asset_balance(self.coin_pair)
         log.info(f"资产【{self.coin_pair.asset_symbol}】当前数量：{asset_qty}, 使用这些资产初始化网格")
         self.position_manager.bought_position(asset_qty)
@@ -242,6 +266,10 @@ class GridStrategy(Strategy):
         book_ticker = self.adapter.get_book_ticker(self.coin_pair)
         log.info(f"最优报价 {book_ticker.compact_display_str}")
 
+        # 如果出现取消订单等出错，则重新初始化网格
+        if self._require_reinitialized:
+            self.initialize()
+
         # 已经触发入场 并且 没有离场停止时，尝试买入，尝试卖出
         if self._handle_triggered_status(book_ticker) and not self._handle_stop_status(book_ticker):
             self._handle_buy(book_ticker)
@@ -275,25 +303,17 @@ class GridStrategy(Strategy):
         safely_run('保存最新交易记录', self.handle_save_trades)
         safely_run('保存账户快照', self.handle_save_account_snapshot)
 
+    def handle_exception(self, e: Exception, event: StrategyEvent):
+        super(GridStrategy, self).handle_exception(e, event=event)
+        if isinstance(e, OrderNotCancelledError):  # 订单没有被正确取消(cancel_order 出错)
+            self._require_reinitialized = True
+
 
 def safely_run(name: str, f: callable, *args, **kwargs):
     try:
         return f(*args, **kwargs)
     except Exception as e:
         log.error(f"【安全退出】{name}时发生异常：", e)
-
-
-class GridStrategyContext(StrategyContext):
-
-    def __init__(self, notifier: Notifier, store: StrategyStore):
-        self.notifier = notifier if notifier is not None else LoggerNotifier()
-        self.store = store
-
-    def get_notifier(self) -> Notifier:
-        return self.notifier
-
-    def get_store(self) -> StrategyStore:
-        return self.store
 
 
 class GridStrategyApp(StrategyApp):
