@@ -7,17 +7,13 @@ from trader.spot.types import CoinPair
 
 
 def test_load_config():
-    config_json = """
-        {
-            "exchange":"BINANCE",
-            "generator":"/path/grid.json",
-            "coin_pair":"BTC$USDT"
-        }
-    """
-    config_f = Path("./fake_config.json")
-    config_f.write_text(config_json)
-    config = GridStrategyConfig.load_from_json(config_f)
+    sample_config_dict = {
+        "exchange": "BINANCE",
+        "generator": "/path/grid.json",
+        "coin_pair": "BTC$USDT"
+    }
+
+    config = GridStrategyConfig.load_from_dict(sample_config_dict)
     assert config.exchange == Exchange.BINANCE
     assert isinstance(config.generator, ConfigGridGenerator)
     assert isinstance(config.coin_pair, CoinPair)
-    config_f.unlink(missing_ok=True)

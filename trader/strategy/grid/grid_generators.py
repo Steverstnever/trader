@@ -29,14 +29,14 @@ class AlgorithmGridGenerator(GridGenerator, ABC):
     def __init__(self, support_price: Decimal, resistance_price: Decimal, number_of_levels: int,
                  max_position_per_level: Decimal):
         """
-                构造函数
+        构造函数
 
-                Args:
-                    support_price (Decimal): （价格）支撑位
-                    resistance_price (Decimal): (价格) 阻力位
-                    number_of_levels (int): 等级数
-                    max_position_per_level (Decimal): 每级别最大仓位
-                """
+        Args:
+            support_price (Decimal): （价格）支撑位
+            resistance_price (Decimal): (价格) 阻力位
+            number_of_levels (int): 等级数
+            max_position_per_level (Decimal): 每级别最大仓位
+        """
         assert resistance_price > support_price, "阻力位价格必须大于支撑位价格"
         assert number_of_levels > 1, "网格数必须 > 1"
 

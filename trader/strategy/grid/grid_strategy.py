@@ -50,6 +50,40 @@ class GridStrategyConfig:
     order_cancel_timeout: timedelta = timedelta(seconds=5)  # 每次下限价（gtc）订单的等待时间，超时后如果未完全成交则 cancel
 
     @classmethod
+    def load_from_dict(cls, primitives_dict: dict) -> "GridStrategyConfig":
+        """
+        从（原生类型的）字典中装载配置
+
+        Args:
+            primitives_dict (dict): 配置字典
+
+            字典示例：
+            {
+                "exchange":"BINANCE",
+                "generator":"/path/grid.json",
+                "coin_pair":"BTC$USDT",
+                "enter_trigger_price":"0", option
+                "stop_on_exit":true, option
+                "level_min_profit":0.005, option
+                "order_query_interval":1, option
+                "order_cancel_timeout":5 option
+            }
+
+        Returns:
+            网格策略配置实例
+        """
+        primitives_dict['exchange'] = Exchange[primitives_dict['exchange']]
+        primitives_dict["coin_pair"] = CoinPair.from_symbol(primitives_dict["coin_pair"])
+        primitives_dict["generator"] = ConfigGridGenerator(Path(primitives_dict["generator"]))
+        if "enter_trigger_price" in primitives_dict:
+            primitives_dict["enter_trigger_price"] = Decimal(primitives_dict["enter_trigger_price"])
+        if "order_query_interval" in primitives_dict:
+            primitives_dict["order_query_interval"] = timedelta(seconds=primitives_dict["order_query_interval"])
+        if "order_cancel_timeout" in primitives_dict:
+            primitives_dict["order_cancel_timeout"] = timedelta(seconds=primitives_dict["order_cancel_timeout"])
+        return cls(**primitives_dict)
+
+    @classmethod
     def load_from_json(cls, path: Path) -> "GridStrategyConfig":
         """
         从 json 文件中加载配置
@@ -58,38 +92,8 @@ class GridStrategyConfig:
 
         Returns:
             网格策略的配置
-
-        文件内容example:
-        {
-            "exchange":"BINANCE",
-            "generator":"/path/grid.json",
-            "coin_pair":"BTC$USDT",
-            "enter_trigger_price":"0", option
-            "stop_on_exit":true, option
-            "level_min_profit":"0.005", option
-            "order_query_interval":1, option
-            "order_cancel_timeout":5 option
-        }
         """
-        content = json.loads(path.read_bytes())
-        params = dict()
-        try:
-            params["exchange"] = getattr(Exchange, content["exchange"])
-        except AttributeError:
-            raise RuntimeError("exchange is not existed")
-        params["coin_pair"] = CoinPair.from_symbol(content["coin_pair"])
-        params["generator"] = ConfigGridGenerator(Path(content["generator"]))
-        if content.get("enter_trigger_price"):
-            params["enter_trigger_price"] = Decimal(content["enter_trigger_price"])
-        if content.get("stop_on_exit") is not None:
-            params["stop_on_exit"] = content["stop_on_exit"]
-        if content.get("level_min_profit"):
-            level_min_profit = Decimal(content["level_min_profit"])
-        if content.get("order_query_interval") is not None:
-            params["order_query_interval"] = timedelta(seconds=content["order_query_interval"])
-        if content.get("order_cancel_timeout") is not None:
-            params["order_cancel_timeout"] = timedelta(seconds=content["order_cancel_timeout"])
-        return cls(**params)
+        return cls.load_from_dict(json.loads(path.read_bytes()))
 
 
 class GridStrategyContext(StrategyContext):
