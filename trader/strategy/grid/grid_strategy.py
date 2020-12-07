@@ -1,4 +1,5 @@
 import logging
+import json
 from dataclasses import dataclass
 from datetime import timedelta, datetime
 from decimal import Decimal
@@ -18,6 +19,7 @@ from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
 from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
 from trader.strategy.grid.grid_position_manager import GridPositionManager, GridGenerator
 from trader.strategy.grid.grid_strategy_adapter import GridStrategyAdapter
+from trader.strategy.grid.grid_generators import ConfigGridGenerator
 from trader.strategy.runner.timer import TimerEvent, TimerRunner
 from trader.strategy.trade_crawler import TradeCrawler
 
@@ -55,8 +57,31 @@ class GridStrategyConfig:
 
         Returns:
             网格策略的配置
+
+        文件内容example:
+        {
+            "exchange":"BINANCE",
+            "generator":"/path/grid.json",
+            "coin_pair":"BTC$USDT",
+            "enter_trigger_price":"0",
+            "stop_on_exit":true,
+            "level_min_profit":"0.005",
+            "order_query_interval":1,
+            "order_cancel_timeout":5
+        }
         """
-        # TODO: 完成从json中加载配置
+        content = json.loads(path.read_bytes())
+        exchange = getattr(Exchange, content["exchange"])
+        coin_pair = CoinPair.from_symbol(content["coin_pair"])
+        generator = ConfigGridGenerator(Path(content["generator"]))
+        enter_trigger_price = Decimal(content["enter_trigger_price"])
+        stop_on_exit = content["stop_on_exit"]
+        level_min_profit = content["level_min_profit"]
+        order_query_interval = timedelta(seconds=content["order_query_interval"])
+        order_cancel_timeout = timedelta(seconds=content["order_query_interval"])
+        return cls(exchange, coin_pair, generator, enter_trigger_price,
+                   stop_on_exit, level_min_profit, order_query_interval,
+                   order_cancel_timeout)
 
 
 class GridStrategy(Strategy):
