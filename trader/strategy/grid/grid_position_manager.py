@@ -8,6 +8,12 @@ from typing import List
 log = logging.getLogger("grid-position-manager")
 
 
+class LevelPositionError(RuntimeError):
+    """
+    仓位错误
+    """
+
+
 class Level:
     """代表一个格子
 
@@ -84,7 +90,7 @@ class Level:
             RuntimeError: 增持仓位超过剩余仓位
         """
         if position > self.remaining_position:
-            raise RuntimeError("增持仓位超过剩余仓位")
+            raise LevelPositionError("增持仓位超过剩余仓位")
         self.position += position
 
     def dec_position(self, position: Decimal):
@@ -97,7 +103,7 @@ class Level:
             RuntimeError: 减持仓位超过当前持仓
         """
         if position > self.position:
-            raise RuntimeError("减持仓位超过当前持仓")
+            raise LevelPositionError("减持仓位超过当前持仓")
         self.position -= position
 
     def is_empty(self) -> bool:
@@ -159,14 +165,14 @@ class Level:
         return self.price_gap * self.max_position
 
     @property
-    def profit_pct(self) -> Decimal:
+    def profit_pct(self) -> float:
         """
         网格收益率（未排除手续费）
 
         Returns:
             网格收益率
         """
-        return self.price_gap / self.low_price
+        return float(self.price_gap / self.low_price)
 
     @property
     def max_cash_qty(self) -> Decimal:
@@ -253,7 +259,7 @@ class GridPositionManager:
     网格
     """
 
-    def __init__(self, generator: GridGenerator, level_min_profit: Decimal = Decimal("0.005")):
+    def __init__(self, generator: GridGenerator, level_min_profit: float = 0.005):
         """
         构造函数
 
@@ -269,7 +275,7 @@ class GridPositionManager:
         self.levels = levels
 
     @staticmethod
-    def _check_levels(levels: List[Level], min_profit):
+    def _check_levels(levels: List[Level], min_profit: float):
         """
         检测网格合法性
 

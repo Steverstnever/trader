@@ -5,6 +5,7 @@ from typing import List
 from trader.credentials import Credentials
 from trader.spot.types import CoinPair, SpotInstrumentInfo, OrderSide, TimeInForce
 from trader.spot.types.book_ticker import BookTicker
+from trader.spot.types.kline import KlinePeriod, Bar
 from trader.spot.types.order_types import Order, Trade
 
 
@@ -121,4 +122,25 @@ class SpotApi(ABC):
 
         Returns:
             交易记录列表
+        """
+
+    @abstractmethod
+    def get_kline(self, coin_pair: CoinPair, period: KlinePeriod) -> List[Bar]:
+        """
+        获取K线
+        Args:
+            coin_pair (CoinPair): 币对
+            period (KlinePeriod): K线周期
+
+        Returns:
+            K线列表
+        """
+
+    @abstractmethod
+    def get_products(self) -> List[CoinPair]:
+        """
+        获取所有可以交易的币对列表
+
+        Returns:
+            币对列表
         """

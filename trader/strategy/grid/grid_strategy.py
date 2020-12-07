@@ -42,7 +42,7 @@ class GridStrategyConfig:
 
     enter_trigger_price: Decimal = Decimal('0')  # 入场触发价
     stop_on_exit: bool = False  # 出场后策略停止
-    level_min_profit: Decimal = Decimal(0.005)  # 每格最小收益率（网格如果不符合此设置要求则拒绝执行）
+    level_min_profit: float = 0.005  # 每格最小收益率（网格如果不符合此设置要求则拒绝执行）
 
     order_query_interval: timedelta = timedelta(seconds=1)  # 下单后查询订单状态的间隔
     order_cancel_timeout: timedelta = timedelta(seconds=5)  # 每次下限价（gtc）订单的等待时间，超时后如果未完全成交则 cancel
@@ -288,7 +288,7 @@ class GridStrategyApp(StrategyApp):
     def __init__(self, config: GridStrategyConfig, credentials: Credentials):
         # 创建上下文
         notifier = LoggerNotifier()
-        store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO: 配置
+        store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO：避免硬编码
         context = GridStrategyContext(notifier=notifier, store=store)
 
         # 创建现货接口
