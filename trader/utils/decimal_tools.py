@@ -1,7 +1,4 @@
 from decimal import Decimal
-from pathlib import Path
-
-from trader.credentials import Credentials
 
 
 def parse_decimal(s: str) -> Decimal:
@@ -34,7 +31,7 @@ def normalize_decimal(d: Decimal) -> Decimal:
     Decimal('512.0001')
     >>> normalize_decimal(Decimal('5120001000'))
     Decimal('5120001000')
-    
+
     Args:
         d (Decimal): 十进制表示的精度数字
 
@@ -44,19 +41,3 @@ def normalize_decimal(d: Decimal) -> Decimal:
     return d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize()
 
 
-def project_root() -> Path:
-    """
-    返回项目根路径
-    """
-    return Path(__file__).parent.parent
-
-
-def load_dev_credentials() -> Credentials:
-    """
-    开发时装载用户凭证
-    """
-    credentials_path = project_root() / '.local/credentials.json'
-    if not credentials_path.exists():
-        raise RuntimeError(f"【错误】用户凭证文件不存在: {credentials_path}")
-
-    return Credentials.load_from_json(credentials_path)

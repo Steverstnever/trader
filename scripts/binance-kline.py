@@ -1,48 +1,33 @@
-from dataclasses import dataclass
 from decimal import Decimal
 
 from trader.spot.api.binance_spot_api import BinanceSpotApi
-from trader.spot.types import CoinPair
+from trader.spot.tools import KlineAnalysis
+from trader.spot.types.book_ticker import BookTicker
 from trader.spot.types.kline import KlinePeriod
+from trader.third_party.feixiaohao import get_top_coins
+from trader.utils import arithmetic_ratio
 
+top_coins = {top_coin.symbol for top_coin in get_top_coins(20)}
+print(top_coins)
 
-@dataclass
-class BarSummary:
-    coin_pair: CoinPair  # 币对
-    period: KlinePeriod  # K线周期
-    avg_avg_price: Decimal  # 平均价格
-    avg_price_gap: Decimal  # 平均价差
-    avg_price_path: Decimal  # 平均价格最小变化路径
-    avg_gap_price_ratio: Decimal  # 平均 价差/平均价格 比率
-    avg_path_price_ratio: Decimal  # 平均 价格路径/平均价格 比率
+api = BinanceSpotApi()
+coin_pairs = api.get_products()
 
+top_coin_pairs = [coin_pair for coin_pair in coin_pairs
+                  if coin_pair.asset_symbol in top_coins and coin_pair.cash_symbol in top_coins]
 
-class CoinPairBarPerformance:
-    def __init__(self, ):
-        self.api = BinanceSpotApi()
+print(f"<< 开始分析 K线特征 ({len(top_coin_pairs)}) >>".center(80, '*'))
+kline_analysis = KlineAnalysis(api)
 
-    def calculate(self, coin_pair, period=KlinePeriod.HOUR1) -> BarSummary:
-        bars = self.api.get_kline(coin_pair=coin_pair, period=period)
-        total_avg_price = Decimal()
-        total_price_gap = Decimal()
-        total_price_path = Decimal()
-        total_gap_price_ratio = Decimal()
-        total_path_price_ratio = Decimal()
-        for bar in bars:
-            total_avg_price += bar.avg_price
-            total_price_gap += bar.price_gap
-            total_price_path += bar.price_path
-            total_gap_price_ratio += bar.gap_price_ratio
-            total_path_price_ratio += bar.path_price_ratio
+summaries = [
+    kline_analysis.calculate(coin_pair=coin_pair, period=KlinePeriod.DAY1)
+    for coin_pair in top_coin_pairs
+]
 
-        return BarSummary(
-            avg_avg_price=total_avg_price / len(bars),
-            avg_price_gap=total_price_gap / len(bars),
-            avg_price_path=total_price_path / len(bars),
-            avg_gap_price_ratio=total_gap_price_ratio / len(bars),
-            avg_path_price_ratio=total_path_price_ratio / len(bars),
-        )
-
-
-summary = CoinPairBarPerformance().calculate(coin_pair=CoinPair('BNB', 'USDT'), period=KlinePeriod.HOUR1)
-print(f"{summary}")
+summaries.sort(key=lambda item: item.avg_path_price_ratio, reverse=True)
+for i, summary in enumerate(summaries):
+    book_ticker: BookTicker = api.get_book_ticker(summary.coin_pair)
+    current_price_ratio = arithmetic_ratio(summary.low_avg_price, summary.high_avg_price, book_ticker.avg_price)
+    print('-' * 80)
+    print(f"{i} => {summary}")
+    print(f"{i} => 当前均价：{book_ticker.avg_price}, 历史价位比例：{current_price_ratio}")

@@ -1,4 +1,5 @@
 import logging
+import json
 from dataclasses import dataclass
 from datetime import timedelta, datetime
 from decimal import Decimal
@@ -19,6 +20,7 @@ from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
 from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
 from trader.strategy.grid.grid_position_manager import GridPositionManager, GridGenerator
 from trader.strategy.grid.grid_strategy_adapter import GridStrategyAdapter
+from trader.strategy.grid.grid_generators import ConfigGridGenerator
 from trader.strategy.runner.timer import TimerEvent, TimerRunner
 from trader.strategy.trade_crawler import TradeCrawler
 
@@ -42,7 +44,7 @@ class GridStrategyConfig:
 
     enter_trigger_price: Decimal = Decimal('0')  # 入场触发价
     stop_on_exit: bool = False  # 出场后策略停止
-    level_min_profit: Decimal = Decimal(0.005)  # 每格最小收益率（网格如果不符合此设置要求则拒绝执行）
+    level_min_profit: float = 0.005  # 每格最小收益率（网格如果不符合此设置要求则拒绝执行）
 
     order_query_interval: timedelta = timedelta(seconds=1)  # 下单后查询订单状态的间隔
     order_cancel_timeout: timedelta = timedelta(seconds=5)  # 每次下限价（gtc）订单的等待时间，超时后如果未完全成交则 cancel
@@ -56,8 +58,38 @@ class GridStrategyConfig:
 
         Returns:
             网格策略的配置
+
+        文件内容example:
+        {
+            "exchange":"BINANCE",
+            "generator":"/path/grid.json",
+            "coin_pair":"BTC$USDT",
+            "enter_trigger_price":"0", option
+            "stop_on_exit":true, option
+            "level_min_profit":"0.005", option
+            "order_query_interval":1, option
+            "order_cancel_timeout":5 option
+        }
         """
-        # TODO: 完成从json中加载配置
+        content = json.loads(path.read_bytes())
+        params = dict()
+        try:
+            params["exchange"] = getattr(Exchange, content["exchange"])
+        except AttributeError:
+            raise RuntimeError("exchange is not existed")
+        params["coin_pair"] = CoinPair.from_symbol(content["coin_pair"])
+        params["generator"] = ConfigGridGenerator(Path(content["generator"]))
+        if content.get("enter_trigger_price"):
+            params["enter_trigger_price"] = Decimal(content["enter_trigger_price"])
+        if content.get("stop_on_exit") is not None:
+            params["stop_on_exit"] = content["stop_on_exit"]
+        if content.get("level_min_profit"):
+            level_min_profit = Decimal(content["level_min_profit"])
+        if content.get("order_query_interval") is not None:
+            params["order_query_interval"] = timedelta(seconds=content["order_query_interval"])
+        if content.get("order_cancel_timeout") is not None:
+            params["order_cancel_timeout"] = timedelta(seconds=content["order_cancel_timeout"])
+        return cls(**params)
 
 
 class GridStrategyContext(StrategyContext):
@@ -288,7 +320,7 @@ class GridStrategyApp(StrategyApp):
     def __init__(self, config: GridStrategyConfig, credentials: Credentials):
         # 创建上下文
         notifier = LoggerNotifier()
-        store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO: 配置
+        store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO：避免硬编码
         context = GridStrategyContext(notifier=notifier, store=store)
 
         # 创建现货接口

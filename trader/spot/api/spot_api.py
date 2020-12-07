@@ -135,3 +135,12 @@ class SpotApi(ABC):
         Returns:
             K线列表
         """
+
+    @abstractmethod
+    def get_products(self) -> List[CoinPair]:
+        """
+        获取所有可以交易的币对列表
+
+        Returns:
+            币对列表
+        """
