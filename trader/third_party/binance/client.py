@@ -1,9 +1,4 @@
-# 【注意】下面代码复制自：
-# https://github.com/sammchardy/python-binance/blob/master/binance/client.py
-#
-# 参考：https://github.com/sammchardy/python-binance
-#
-# 会做改动
+# coding=utf-8
 
 import hashlib
 import hmac
@@ -22,11 +17,13 @@ class Client(object):
     MARGIN_API_URL = 'https://api.binance.{}/sapi'
     WEBSITE_URL = 'https://www.binance.{}'
     FUTURES_URL = 'https://fapi.binance.{}/fapi'
+    COIN_FUTURES_URL = 'https://dapi.binance.{}/dapi'
     PUBLIC_API_VERSION = 'v1'
     PRIVATE_API_VERSION = 'v3'
     WITHDRAW_API_VERSION = 'v3'
     MARGIN_API_VERSION = 'v1'
     FUTURES_API_VERSION = 'v1'
+    COIN_FUTURES_API_VERSION = 'v1'
 
     SYMBOL_TYPE_SPOT = 'SPOT'
 
@@ -102,6 +99,7 @@ class Client(object):
         self.MARGIN_API_URL = self.MARGIN_API_URL.format(tld)
         self.WEBSITE_URL = self.WEBSITE_URL.format(tld)
         self.FUTURES_URL = self.FUTURES_URL.format(tld)
+        self.COIN_FUTURES_URL = self.COIN_FUTURES_URL.format(tld)
 
         self.API_KEY = api_key
         self.API_SECRET = api_secret
@@ -135,6 +133,9 @@ class Client(object):
 
     def _create_futures_api_uri(self, path):
         return self.FUTURES_URL + '/' + self.FUTURES_API_VERSION + '/' + path
+
+    def _create_coin_futures_api_uri(self, path):
+        return self.COIN_FUTURES_URL + '/' + self.COIN_FUTURES_API_VERSION + '/' + path
 
     def _generate_signature(self, data):
 
@@ -228,6 +229,10 @@ class Client(object):
     def _request_futures_api(self, method, path, signed=False, **kwargs):
         uri = self._create_futures_api_uri(path)
 
+        return self._request(method, uri, signed, True, **kwargs)
+
+    def _request_coin_futures_api(self, method, path, signed=False, **kwargs):
+        uri = self._create_coin_futures_api_uri(path)
         return self._request(method, uri, signed, True, **kwargs)
 
     def _handle_response(self):
@@ -2479,7 +2484,7 @@ class Client(object):
             {
                "assets":[
                   {
-                    "baseAsset": 
+                    "baseAsset":
                     {
                       "asset": "BTC",
                       "borrowEnabled": true,
@@ -2492,7 +2497,7 @@ class Client(object):
                       "repayEnabled": true,
                       "totalAsset": "0.00000000"
                     },
-                    "quoteAsset": 
+                    "quoteAsset":
                     {
                       "asset": "USDT",
                       "borrowEnabled": true,
@@ -2506,8 +2511,8 @@ class Client(object):
                       "totalAsset": "0.00000000"
                     },
                     "symbol": "BTCUSDT"
-                    "isolatedCreated": true, 
-                    "marginLevel": "0.00000000", 
+                    "isolatedCreated": true,
+                    "marginLevel": "0.00000000",
                     "marginLevelStatus": "EXCESSIVE", // "EXCESSIVE", "NORMAL", "MARGIN_CALL", "PRE_LIQUIDATION", "FORCE_LIQUIDATION"
                     "marginRatio": "0.00000000",
                     "indexPrice": "10000.00000000"
@@ -2518,7 +2523,7 @@ class Client(object):
                 ],
                 "totalAssetOfBtc": "0.00000000",
                 "totalLiabilityOfBtc": "0.00000000",
-                "totalNetAssetOfBtc": "0.00000000" 
+                "totalNetAssetOfBtc": "0.00000000"
             }
 
         If "symbols" is sent:
@@ -2526,7 +2531,7 @@ class Client(object):
             {
                "assets":[
                   {
-                    "baseAsset": 
+                    "baseAsset":
                     {
                       "asset": "BTC",
                       "borrowEnabled": true,
@@ -2539,7 +2544,7 @@ class Client(object):
                       "repayEnabled": true,
                       "totalAsset": "0.00000000"
                     },
-                    "quoteAsset": 
+                    "quoteAsset":
                     {
                       "asset": "USDT",
                       "borrowEnabled": true,
@@ -2553,8 +2558,8 @@ class Client(object):
                       "totalAsset": "0.00000000"
                     },
                     "symbol": "BTCUSDT"
-                    "isolatedCreated": true, 
-                    "marginLevel": "0.00000000", 
+                    "isolatedCreated": true,
+                    "marginLevel": "0.00000000",
                     "marginLevelStatus": "EXCESSIVE", // "EXCESSIVE", "NORMAL", "MARGIN_CALL", "PRE_LIQUIDATION", "FORCE_LIQUIDATION"
                     "marginRatio": "0.00000000",
                     "indexPrice": "10000.00000000"
@@ -3743,6 +3748,12 @@ class Client(object):
         """
         return self._request_futures_api('post', 'order', True, data=params)
 
+    def coin_futures_create_order(self, **params):
+        """Send in a new order.
+        https://binance-docs.github.io/apidocs/delivery/cn/#trade-2
+        """
+        return self._request_coin_futures_api('post', 'order', True, data=params)
+
     def futures_get_order(self, **params):
         """Check an order's status.
 
@@ -3750,6 +3761,12 @@ class Client(object):
 
         """
         return self._request_futures_api('get', 'order', True, data=params)
+
+    def coin_futures_get_order(self, **params):
+        """
+        https://binance-docs.github.io/apidocs/delivery/cn/#user_data-2
+        """
+        return self._request_coin_futures_api('get', 'order', True, data=params)
 
     def futures_get_open_orders(self, **params):
         """Get all open orders on a symbol.
@@ -3782,6 +3799,9 @@ class Client(object):
 
         """
         return self._request_futures_api('delete', 'allOpenOrders', True, data=params)
+
+    def coin_futures_cancel_all_open_orders(self, **params):
+        return self._request_coin_futures_api('delete', 'allOpenOrders', True, data=params)
 
     def futures_cancel_orders(self, **params):
         """Cancel multiple futures orders
@@ -3862,3 +3882,54 @@ class Client(object):
 
         """
         return self._request_futures_api('get', 'income', True, data=params)
+
+    def futures_get_position_side_dual(self, **params):
+        """查询持仓模式"""
+        return self._request_futures_api('get', 'positionSide/dual', True, data=params)
+
+    def futures_update_position_side_dual(self, **params):
+        """更改持仓模式"""
+        return self._request_futures_api('post', 'positionSide/dual', True, data=params)
+
+    def coin_futures_update_position_side_dual(self, **params):
+        """更改持仓模式"""
+        return self._request_coin_futures_api('post', 'positionSide/dual', True, data=params)
+
+    def coin_futures_klines(self, **params):
+        """"""
+        return self._request_coin_futures_api('get', 'klines', data=params)
+
+    def coin_futures_account(self, **params):
+        """https://binance-docs.github.io/apidocs/delivery/cn/#user_data-7"""
+
+        return self._request_coin_futures_api('get', 'account', True, data=params)
+
+    def coin_futures_position_information(self, **params):
+        """
+            https://binance-docs.github.io/apidocs/delivery/cn/#479ce129f6
+        """
+        return self._request_coin_futures_api('get', 'positionRisk', True, data=params)
+
+    def coin_futures_get_order(self, **params):
+        """
+            https://binance-docs.github.io/apidocs/delivery/cn/#user_data-2
+        """
+        return self._request_coin_futures_api('get', 'order', True, data=params)
+
+    def coin_futures_exchange_info(self):
+        """
+            https://binance-docs.github.io/apidocs/delivery/cn/#0f3f2d5ee7
+        """
+        return self._request_coin_futures_api('get', 'exchangeInfo')
+
+    def coin_futures_get_position_side_dual(self, **params):
+        """
+            https://binance-docs.github.io/apidocs/delivery/cn/#user_data
+        """
+        return self._request_coin_futures_api('get', 'positionSide/dual', True, data=params)
+
+    def coin_futures_cancel_order(self, **params):
+        """
+            https://binance-docs.github.io/apidocs/delivery/cn/#trade-5
+        """
+        return self._request_coin_futures_api('delete', 'order', True, data=params)
