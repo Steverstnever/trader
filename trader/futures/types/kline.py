@@ -14,6 +14,15 @@ class Bar:
     low: Decimal
     volume: Decimal
 
+    def to_dict(self):
+        return {
+            'open_time': self.open_time,
+            'open_price': self.open_price,
+            'close_price': self.close_price,
+            'high': self.high,
+            'low': self.low,
+            'volume': self.volume
+        }
 
 class Kline:
     def __init__(self, size):

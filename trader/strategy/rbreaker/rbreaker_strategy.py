@@ -8,7 +8,7 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 
-from trader.futures.types import ContractPair
+from trader.futures.types import ContractPair, Bar
 from trader.futures.types.kline import Kline
 from trader.credentials import Credentials
 from trader.notifier import Notifier, LoggerNotifier
@@ -23,12 +23,13 @@ from trader.store import StrategyStore
 from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
 from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
 from trader.strategy.grid.grid_position_manager import GridPositionManager, GridGenerator
-from trader.strategy.grid.grid_strategy_adapter import GridStrategyAdapter
+from trader.strategy.rbreaker.rbreaker_strategy_adapter import RBreakerStrategyAdapter
 from trader.strategy.runner.timer import TimerEvent, TimerRunner
 from trader.strategy.trade_crawler import TradeCrawler
 
 
 from trader.strategy.base import Strategy
+from trader.futures.api.futures_api import FuturesApi
 
 
 LONG = 'LONG'  # 多单
@@ -204,6 +205,7 @@ class RBreakerStrategyContext(StrategyContext):
 class RBreakerConfig:
     exchange: Exchange
     contract_pair: ContractPair
+    kline_interval: str
     do_chain_window_size: int
     setup_coef: Decimal
     enter_coef_1: Decimal
@@ -213,20 +215,37 @@ class RBreakerConfig:
     fixed_size: Decimal
     trailing_long: Decimal
     trailing_short: Decimal
+    order_query_interval: timedelta
+    order_cancel_timeout: timedelta
 
     @classmethod
     def load_from_json(cls, path: Path):
         """"""
 
 
+class Reporter:
+    def __init__(self, futures_api):
+        self.futures_api = futures_api
+
+    def show_position(self, contract_pair: ContractPair):
+        """"""
+
+    def show_asset_position(self, contract_pair: ContractPair):
+        """"""
+
+
+def get_do_chain_value(kline):
+    """计算唐奇安通道值"""
+    tend_high = max([item.high for item in kline])
+    tend_low = min([item.low for item in kline])
+    tend_center = (tend_high+tend_low)/2
+    return tend_high, tend_low, tend_center
+
+
 class RBreakerStrategy(Strategy):
-    def __init__(self, conf: RBreakerConfig, context: RBreakerStrategyContext, futures_api: ):
-        self.config: RBreakerConfig = conf
-        self.kline = Kline(conf.do_chain_window_size)
 
-
-        self.order_manager = ExchangeManager(self.config.exchange)
-
+    def __init__(self, conf: RBreakerConfig, context: RBreakerStrategyContext, futures_api: FuturesApi):
+        super(RBreakerStrategy, self).__init__(context)
         self.day_open = None
         self.day_low = None
         self.day_high = None
@@ -242,18 +261,21 @@ class RBreakerStrategy(Strategy):
         self.intra_trade_low = 0
         self.intra_trade_high = 0
 
-    def on_start(self):
-        k = rest.currency_futures_klines(self.config.exchange,
-                                         symbol=self.config.symbol.perp_value,
-                                         interval=self.config.interval,
-                                         limit=self.config.dochain_window_size)
+        self.config: RBreakerConfig = conf
+        self.contract_pair = conf.contract_pair
+        self.kline = Kline(conf.do_chain_window_size)
+        self.instrument_info = self.adapter.get_instrument_info(self.contract_pair)
+        self.reporter = Reporter(futures_api)
+        self.adapter = RBreakerStrategyAdapter(futures_api,
+                                               order_query_interval=self.config.order_query_interval,
+                                               order_cancel_timeout=self.config.order_cancel_timeout)
+
+    def initialize(self):
+        k = self.adapter.klines(self.contract_pair, self.config.kline_interval, limit=self.config.do_chain_window_size)
         for item in k:
             self.kline.append(item)
 
-        k = rest.currency_futures_klines(self.config.exchange,
-                                         symbol=self.config.symbol.perp_value,
-                                         interval='1d',
-                                         limit=2)
+        k = self.adapter.klines(self.contract_pair, interval='1d', limit=2)
         last_day_bar, today_bar = k[0], k[1]
         self.calculate(last_day_bar)
         self.day_open = today_bar.open_price
@@ -261,54 +283,54 @@ class RBreakerStrategy(Strategy):
         self.day_high = today_bar.high
         self.day_close = today_bar.close_price
 
-    def calculate(self, bar: KlineItem):
+    def calculate(self, bar: Bar):
         self.buy_setup = bar.low - self.config.setup_coef * (bar.high - bar.close_price)  # 观察买入价
         self.sell_setup = bar.high + self.config.setup_coef * (bar.close_price - bar.low)  # 观察卖出价
-
         self.buy_enter = (self.config.enter_coef_1 / 2) * (
                     bar.high + bar.low) - self.config.enter_coef_2 * bar.high  # 反转买入价
         self.sell_enter = (self.config.enter_coef_1 / 2) * (
                     bar.high + bar.low) - self.config.enter_coef_2 * bar.low  # 反转卖出价
-
         self.buy_break = self.sell_setup + self.config.break_coef * (self.sell_setup - self.buy_setup)  # 突破买入价
         self.sell_break = self.buy_setup - self.config.break_coef * (self.sell_setup - self.buy_setup)  # 突破卖出价
-        logger.info('buy_setup: ' + str(tool.make_precision(self.buy_setup, 2)) +
-                    ' sell_setup: ' + str(tool.make_precision(self.sell_setup, 2)) +
-                    ' buy_enter: ' + str(tool.make_precision(self.buy_enter, 2)) +
-                    ' sell_enter: ' + str(tool.make_precision(self.sell_enter, 2)) +
-                    ' buy_break: ' + str(tool.make_precision(self.buy_break, 2)) +
-                    ' sell_break: ' + str(tool.make_precision(self.sell_break, 2)))
+        logger.info('buy_setup: ' + str(self.instrument_info.quantize_price(self.buy_setup)) +
+                    ' sell_setup: ' + str(self.instrument_info.quantize_price(self.sell_setup)) +
+                    ' buy_enter: ' + str(self.instrument_info.quantize_price(self.buy_enter)) +
+                    ' sell_enter: ' + str(self.instrument_info.quantize_price(self.sell_enter)) +
+                    ' buy_break: ' + str(self.instrument_info.quantize_price(self.buy_break)) +
+                    ' sell_break: ' + str(self.instrument_info.quantize_price(self.sell_break)))
 
-    def on_bar(self, item: KlineItem):
-        bar = self.kline.append(item)
+    def on_bar(self, new_bar: Bar):
+        bar = self.kline.append(new_bar)
         if bar is None:
             return
-        position_side, position_amount = self.order_manager.get_position(self.config.symbol)
+        position_side, position_amount = self.adapter.get_position(self.contract_pair)
         logger.info('open_time: ' + str(bar.open_time) +
-                    '|open_price: ' + str(tool.make_precision(bar.open_price, 2)) +
-                    '|high: ' + str(tool.make_precision(bar.high, 2)) +
-                    '|low: ' + str(tool.make_precision(bar.low, 2)) +
-                    '|close_price: ' + str(tool.make_precision(bar.close_price, 2))
+                    '|open_price: ' + str(self.instrument_info.quantize_price(bar.open_price)) +
+                    '|high: ' + str(self.instrument_info.quantize_price(bar.high)) +
+                    '|low: ' + str(self.instrument_info.quantize_price(bar.low)) +
+                    '|close_price: ' + str(self.instrument_info.quantize_price(bar.close_price))
                     )
-        self.order_manager.show_position(self.config.symbol)
-        self.order_manager.show_asset_position(self.config.symbol)
-        self.order_manager.cancel_all_order_with_retry(self.config.symbol)
-        if bar.open_time.day == item.open_time.day:
-            self.day_close = item.close_price
-            self.day_low = min(self.day_low, item.low)
-            self.day_high = max(self.day_high, item.high)
+        self.reporter.show_position(self.contract_pair)
+        self.reporter.show_asset_position(self.contract_pair)
+        self.adapter.cancel_all_orders(self.contract_pair)
+        if bar.open_time.day == new_bar.open_time.day:
+            self.day_close = new_bar.close_price
+            self.day_low = min(self.day_low, new_bar.low)
+            self.day_high = max(self.day_high, new_bar.high)
         else:
-            bar = KlineItem(open_price=self.day_open,
-                            close_price=self.day_close,
-                            high=self.day_high,
-                            low=self.day_low)
+            bar = Bar(open_price=self.day_open,
+                      close_price=self.day_close,
+                      high=self.day_high,
+                      low=self.day_low,
+                      volume=Decimal('0'),  # 不关注volume
+                      open_time=new_bar.open_time-timedelta(days=1))  # 不关注open time
             logger.info(f'new day: {bar.to_dict()}')
             self.calculate(bar)
-            self.day_open = item.open_price
-            self.day_high = item.high
-            self.day_close = item.close_price
-            self.day_low = item.low
-        tend_high, tend_low, _ = tool.get_do_chain_value(self.kline)
+            self.day_open = new_bar.open_price
+            self.day_high = new_bar.high
+            self.day_close = new_bar.close_price
+            self.day_low = new_bar.low
+        tend_high, tend_low, _ = get_do_chain_value(self.kline)
         if position_side == LONG:
             """平多"""
             self.intra_trade_high = max(self.intra_trade_high, bar.high)
@@ -334,3 +356,9 @@ class RBreakerStrategy(Strategy):
                                          self.config.multiplier * self.config.fixed_size)
                 self.order_manager.buy(self.config.symbol, self.buy_enter, self.config.fixed_size)
         logger.info(f"当前挂单{self.order_manager.orders}")
+
+    def handle_event(self, event: StrategyEvent):
+        pass
+
+    def handle_safely_quit(self):
+        pass

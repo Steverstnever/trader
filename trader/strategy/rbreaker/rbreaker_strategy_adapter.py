@@ -36,8 +36,8 @@ def retry(retry_times=3):
     return f
 
 
-class GridStrategyAdapter(AccountProvider, OrderExecutorProvider, InstrumentInfoProvider,
-                          TradeProvider):
+class RBreakerStrategyAdapter(AccountProvider, OrderExecutorProvider, InstrumentInfoProvider,
+                              TradeProvider):
 
     def __init__(self, futures_api: FuturesApi, order_query_interval: timedelta, order_cancel_timeout: timedelta):
         """
@@ -62,4 +62,13 @@ class GridStrategyAdapter(AccountProvider, OrderExecutorProvider, InstrumentInfo
         return self.futures_api.cancel_all(contract_pair)
 
     def get_balance_by_symbol(self, asset_symbol: str):
+        return self.futures_api.get_balance_by_symbol(asset_symbol)
+
+    def klines(self, contract_pair: ContractPair, interval: str, **kwargs):
+        return self.futures_api.klines(contract_pair, interval, **kwargs)
+
+    def get_position(self, contract_pair: ContractPair):
+        return self.futures_api.get_position(contract_pair)
+
+    def show_position(self):
         """"""
