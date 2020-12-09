@@ -1,31 +1,16 @@
 import logging
-import sys
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
-from dataclasses import dataclass
-from datetime import timedelta, datetime
-from decimal import Decimal
-from enum import Enum
 from pathlib import Path
+from enum import Enum
 
-from trader.futures.types import ContractPair, Bar, Kline, Position, PositionSide
-from trader.credentials import Credentials
+from trader.futures.types import ContractPair, Bar, Kline, PositionSide
 from trader.notifier import Notifier, LoggerNotifier
 from trader.spot.api.exchange import Exchange
-from trader.spot.api.spot_api import SpotApi
-from trader.spot.order_executor.limit_gtc_order_executor import OrderNotCancelledError
-from trader.spot.types import CoinPair
-from trader.spot.types.account_snapshot import AccountSnapshot
-from trader.spot.types.book_ticker import BookTicker
-from trader.spot.types.order_types import Order
 from trader.store import StrategyStore
-from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
-from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
-from trader.strategy.grid.grid_position_manager import GridPositionManager, GridGenerator
+from trader.strategy.base import StrategyEvent, StrategyContext
 from trader.strategy.rbreaker.rbreaker_strategy_adapter import RBreakerStrategyAdapter
-from trader.strategy.runner.timer import TimerEvent, TimerRunner
-from trader.strategy.trade_crawler import TradeCrawler
-
 
 from trader.strategy.base import Strategy
 from trader.futures.api.futures_api import FuturesApi
@@ -33,147 +18,6 @@ from trader.futures.api.futures_api import FuturesApi
 
 logger = logging.getLogger('r-breaker')
 binance_order_not_exit = -2013
-
-
-class ExchangeManager:
-    def __init__(self, exchange):
-        self.exchange = exchange
-        self.orders = {'BUY.LONG': [], 'BUY.SHORT': [], 'SELL.LONG': [], 'SELL.SHORT': []}
-
-    def is_empty(self):
-        return not bool(any(self.orders.values()))
-
-    def show_asset_position(self, contract_pair: ContractPair):
-        account = rest.currency_futures_account(self.exchange)
-
-        if self.exchange == binance:
-            for item in account['assets']:
-                if item['asset'] == symbol.cash:
-                    margin_balance = item['marginBalance']
-                    wallet_balance = item['walletBalance']
-                    logger.info(f'交易所: {self.exchange}|合约账户|资产: {symbol.cash}|余额: {wallet_balance}| '
-                                f'保证金余额 :{margin_balance}|')
-                    break
-
-    def show_position(self, symbol: Symbol):
-        rv = rest.currency_futures_get_position(self.exchange, symbol.perp_value)
-        if self.exchange == binance:
-            for each in rv:
-                amt = Decimal(each['positionAmt'])
-                if amt != 0:
-                    logger.info(f"|持仓: {symbol.value}|方向: {each['positionSide']}|数量: "
-                                f"{amt}| 持仓未实现盈亏: {each['unRealizedProfit']}")
-
-    def get_position(self, symbol: Symbol):
-        rv = rest.currency_futures_get_position(self.exchange, symbol.perp_value)
-        if self.exchange == binance:
-            for each in rv:
-                amt = Decimal(each['positionAmt'])
-                if amt != 0:
-                    return each['positionSide'], abs(amt)  # 币安做空时positionAmt是负数
-            return None, 0
-
-    def check_order_exists(self, order_id, **kwargs):
-        order = rest.currency_futures_get_order(self.exchange,
-                                                origClientOrderId=order_id,
-                                                symbol=kwargs['symbol'])
-        if self.exchange == binance:
-            if order and order['status'] in ('NEW', 'PARTIALLY_FILLED', 'PARTIALLY_FILLED'):
-                return True
-            else:
-                logger.exception(f"{self.exchange}订单{order_id}下单失败{order['status']}")
-                return False
-
-    def get_quantity(self, symbol: Symbol):
-        """余额900时每次做空0.01btc，做多6*0.01btc, 用一半的余额按照这个比例开仓"""
-        balance = rest.currency_futures_account_balance(self.exchange, symbol.cash)
-        if balance < 900:  # todo
-            return Decimal('0.01')
-        return balance / Decimal('1800') * Decimal('0.01')
-
-    def create_order(self, side, position_side, symbol: Symbol, price, quantity):
-        if self.exchange == binance:
-            unit = tool.get_futures_unit(self.exchange, symbol)
-            quantity = tool.make_precision(quantity, unit['quantity_precision'])
-            price = tool.make_precision(price, unit['price_precision'])
-            if quantity > unit['max_qty'] or quantity < unit['min_qty']:
-                logger.exception(f"quantity错误{quantity}, max_qty: {unit['max_qty']}, min_qty: {unit['min_qty']}, "
-                                 f"{side} {position_side}")
-                return
-            if price > unit['max_price'] or price < unit['min_price']:
-                logger.exception(f"price错误{price}, max_price: {unit['max_price']}, min_price: {unit['min_price']},"
-                                 f"{side} {position_side}")
-            order_id = tool.gen_order_id()
-            params = {
-                'newClientOrderId': order_id,
-                'symbol': symbol.value,
-                'side': side,
-                'positionSide': position_side,
-                'type': 'STOP',  # 目前都是stop类型单
-                'quantity': str(quantity),
-                'price': price,
-                'stopPrice': price
-            }
-            logger.info(f'下单: {params}')
-            try:
-                rest.futures_create_order(binance, **params)
-            except Exception as e:
-                logger.exception(e)
-                try:
-                    if self.check_order_exists(order_id=order_id, symbol=symbol.perp_value):
-                        self.orders[f"{side}.{position_side}"].append(order_id)
-                    else:
-                        logger.exception(f'订单{order_id}创建失败')
-                except BinanceAPIException as e:
-                    if e.code != binance_order_not_exit:
-                        self.orders[f"{side}.{position_side}"].append(order_id)
-                except Exception as e:
-                    logger.exception(f'未知异常{e}')  # 未知异常，人工处理
-                    sys.exit(-1)
-            else:
-                logger.info(f"订单: {params}创建成功, order id: {order_id}")
-                self.orders[f"{side}.{position_side}"].append(order_id)
-
-    def short(self, symbol: Symbol, price, multiplier):
-        """做空"""
-        quantity = multiplier * self.get_quantity(symbol)
-        self.create_order('SELL', 'SHORT', symbol, price, quantity)
-
-    def buy(self, symbol: Symbol, price, multiplier):
-        """做多"""
-        quantity = multiplier * self.get_quantity(symbol)
-        self.create_order('BUY', 'LONG', symbol, price, quantity)
-
-    def sell(self, symbol: Symbol, price, position):
-        """平多"""
-        self.create_order('SELL', 'LONG', symbol, price, position)
-
-    def cover(self, symbol: Symbol, price, position):
-        """平空"""
-        self.create_order('BUY', 'SHORT', symbol, price, position)
-
-    def cancel_all_order_with_retry(self, symbol: Symbol, retry_time=3):
-        if self.is_empty():
-            return
-        i = 1
-        while i <= retry_time:
-            if not self._cancel_all(symbol):
-                logger.warning(f'重试撤单第{retry_time}次')
-                i += 1
-            else:
-                break
-
-    def _cancel_all(self, symbol: Symbol):
-        if self.exchange == binance:
-            try:
-                rest.futures_delete_all_order(self.exchange, symbol=symbol.value)
-            except Exception as e:
-                logger.exception(f"撤单失败{e}, 订单详情{self.orders}")
-                return False
-            else:
-                logger.info(f"撤销全部订单")
-                self.orders = {'BUY.LONG': [], 'BUY.SHORT': [], 'SELL.LONG': [], 'SELL.SHORT': []}
-                return True
 
 
 class RBreakerTimerIds(Enum):
@@ -282,7 +126,7 @@ class RBreakerStrategy(Strategy):
 
     def get_position(self):
         rv = self.adapter.get_position(self.contract_pair)
-        return rv[0]  # todo 目前只考虑单向成交，不考虑多空同时成交
+        return rv[0] if rv else None  # todo 目前只考虑单向成交，不考虑多空同时成交
 
     def calculate(self, bar: Bar):
         self.buy_setup = bar.low - self.config.setup_coef * (bar.high - bar.close_price)  # 观察买入价
@@ -304,7 +148,7 @@ class RBreakerStrategy(Strategy):
         bar = self.kline.append(new_bar)
         if bar is None:
             return
-        position = self.adapter.get_position(self.contract_pair)
+        position = self.get_position()
         logger.info('open_time: ' + str(bar.open_time) +
                     '|open_price: ' + str(self.instrument_info.quantize_price(bar.open_price)) +
                     '|high: ' + str(self.instrument_info.quantize_price(bar.high)) +
@@ -332,31 +176,51 @@ class RBreakerStrategy(Strategy):
             self.day_close = new_bar.close_price
             self.day_low = new_bar.low
         tend_high, tend_low, _ = get_do_chain_value(self.kline)
-        if position.position_side == PositionSide.LONG:
+        if position and position.position_side == PositionSide.LONG:
             """平多"""
             self.intra_trade_high = max(self.intra_trade_high, bar.high)
             long_stop = self.intra_trade_high * (1 - self.config.trailing_long / 100)
-            self.adapter.get_order_executor().sell(self.config.contract_pair, long_stop, position_amount)
-        elif position.position_side == SHORT:
+            self.adapter.get_order_executor().sell(self.config.contract_pair,
+                                                   price=long_stop,
+                                                   stop_price=long_stop,
+                                                   qty=position.position_amt)
+        elif position and position.position_side == PositionSide.SHORT:
             """平空"""
             self.intra_trade_low = min(self.intra_trade_low, bar.low)
             short_stop = self.intra_trade_low * (1 + self.config.trailing_short / 100)
-            self.order_manager.cover(self.config.symbol, short_stop, position_amount)
-        elif position_side is None:
+            self.adapter.get_order_executor().cover(self.config.contract_pair,
+                                                    price=short_stop,
+                                                    stop_price=short_stop,
+                                                    qty=position.position_amt)
+        elif position is None:
             self.intra_trade_low = bar.low
             self.intra_trade_high = bar.high
-            logger.info(f"tend_low: {tool.make_precision(tend_low, 2)}, "
-                        f"tend_high: {tool.make_precision(tend_high, 2)}")
+            logger.info(f"tend_low: {self.instrument_info.quantize_price(tend_low)}, "
+                        f"tend_high: {self.instrument_info.quantize_price(tend_high)}")
+            current_orders = []
             if tend_high > self.sell_setup:
                 long_entry = max(self.buy_break, self.day_high)
-                self.order_manager.buy(self.config.symbol, long_entry, self.config.multiplier * self.config.fixed_size)
-                self.order_manager.short(self.config.symbol, self.sell_enter, self.config.fixed_size)
+                order1 = self.adapter.get_order_executor().buy(self.contract_pair,
+                                                               price=long_entry,
+                                                               stop_price=long_entry,
+                                                               qty=self.config.multiplier * self.config.fixed_size)
+                order2 = self.adapter.get_order_executor().short(self.contract_pair,
+                                                                 price=self.sell_enter,
+                                                                 stop_price=self.sell_enter,
+                                                                 qty=self.config.fixed_size)
+                current_orders = [order1, order2]
             elif tend_low < self.buy_setup:
                 short_entry = min(self.sell_break, self.day_low)
-                self.order_manager.short(self.config.symbol, short_entry,
-                                         self.config.multiplier * self.config.fixed_size)
-                self.order_manager.buy(self.config.symbol, self.buy_enter, self.config.fixed_size)
-        logger.info(f"当前挂单{self.order_manager.orders}")
+                order1 = self.adapter.get_order_executor().short(self.contract_pair,
+                                                                 price=short_entry,
+                                                                 stop_price=short_entry,
+                                                                 qty=self.config.multiplier * self.config.fixed_size)
+                order2 = self.adapter.get_order_executor().buy(self.contract_pair,
+                                                               price=self.buy_enter,
+                                                               stop_price=self.buy_enter,
+                                                               qty=self.config.fixed_size)
+                current_orders = [order1, order2]
+            logger.info(f"当前挂单{current_orders}")
 
     def handle_event(self, event: StrategyEvent):
         pass

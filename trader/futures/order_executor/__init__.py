@@ -13,21 +13,21 @@ class OrderExecutor(ABC):
                      stop_price: Decimal, qty: Decimal, **kwargs) -> Order:
         """"""
 
-    def short(self, contract_pair: ContractPair, price: Decimal, qty: Decimal, **kwargs) -> Order:
+    def short(self, contract_pair: ContractPair, price: Decimal, stop_price: Decimal, qty: Decimal, **kwargs) -> Order:
         """做空"""
-        return self._place_order(contract_pair, OrderSide.SELL, PositionSide.SHORT, price, qty, **kwargs)
+        return self._place_order(contract_pair, OrderSide.SELL, PositionSide.SHORT, price, stop_price,  qty, **kwargs)
 
-    def buy(self, contract_pair: ContractPair, price: Decimal, qty: Decimal, **kwargs):
+    def buy(self, contract_pair: ContractPair, price: Decimal, stop_price: Decimal, qty: Decimal, **kwargs):
         """做多"""
-        return self._place_order(contract_pair, OrderSide.BUY, PositionSide.SHORT, price, qty, **kwargs)
+        return self._place_order(contract_pair, OrderSide.BUY, PositionSide.SHORT, price, stop_price, qty, **kwargs)
 
-    def sell(self, contract_pair: ContractPair, price, qty, **kwargs):
+    def sell(self, contract_pair: ContractPair, price: Decimal, stop_price: Decimal, qty, **kwargs):
         """平多"""
-        return self._place_order(contract_pair, OrderSide.SELL, PositionSide.LONG, price, qty, **kwargs)
+        return self._place_order(contract_pair, OrderSide.SELL, PositionSide.LONG, price, stop_price, qty, **kwargs)
 
-    def cover(self, contract_pair: ContractPair, price, qty, **kwargs):
+    def cover(self, contract_pair: ContractPair, price: Decimal, stop_price: Decimal, qty, **kwargs):
         """平空"""
-        return self._place_order(contract_pair, OrderSide.BUY, PositionSide.SHORT, contract_pair, price, qty, **kwargs)
+        return self._place_order(contract_pair, OrderSide.BUY, PositionSide.SHORT, price, stop_price, qty, **kwargs)
 
 
 class OrderExecutorProvider(ABC):
