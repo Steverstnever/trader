@@ -192,17 +192,23 @@ def test_grid_manager():
 
 def test_volume_profile_grid():
     k_line = list()
-    for i in range(300):
-        low = random.uniform(i + 10, i + 20)
-        high = random.uniform(i + 20, i + 30)
+    for i in range(101):
+        low = i + 4
+        high = i + 6
         open_ = random.uniform(low, high)
-        close = random.uniform(low, high)
-        vol = random.uniform(1, 300)
+        close = i + 5
+        vol = 100
         k_line.append(Bar(time=datetime.datetime.now(), open=Decimal(open_),
                           close=Decimal(close), high=Decimal(high),
                           low=Decimal(low),
                           volume=Decimal(vol)))
-    g = VolumeGridGenerator(Decimal("50.0001"), Decimal("257.02"), 10,
-                            Decimal("200"), VolumeProfile.create_volume_profile(k_line))
-    for level in g.generate():
-        print(level)
+    vp = VolumeProfile.create_volume_profile(k_line)
+    g = VolumeGridGenerator(Decimal("5"), Decimal("105"), 5,
+                            Decimal("200"), vp)
+    assert len(g.generate()) <= 5
+
+    position_m = GridPositionManager(g, level_min_profit=0.05)
+    for i in g.generate():
+        print(i)
+    assert position_m.get_positions_to_buy(Decimal("80")) == Decimal("200"), position_m.get_positions_to_buy(Decimal("80"))
+    assert position_m.get_positions_to_buy(Decimal("30")) == Decimal("600"), position_m.get_positions_to_buy(Decimal("30"))
