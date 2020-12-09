@@ -7,8 +7,8 @@ from trader.credentials import Credentials
 from trader.futures.api.futures_api import FuturesApi
 from trader.third_party.binance.client import Client
 from trader.futures.types import (
-    ContractPair, PerpetualContractPair, DeliveryContractPair, Bar, OrderSide,
-    PositionSide, Order, OrderStatus, OrderType, FuturesInstrumentInfo, Position
+    Asset, ContractPair, PerpetualContractPair, DeliveryContractPair, Bar, Position,
+    PositionSide, Order, OrderStatus, OrderType, FuturesInstrumentInfo, OrderSide
 )
 
 
@@ -145,11 +145,15 @@ class BinanceUSDTFuturesApi(FuturesApi):
         kwargs['symbol'] = self._contract_pair_to_symbol(contract_pair)
         self.client.futures_cancel_all_open_orders(**kwargs)
 
-    def available_balance(self, symbol: str) -> Decimal:
+    def account_balance(self, symbol: str) -> Asset:
         rv = self.client.futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:
-                return Decimal(each.get('availableBalance', '0'))
+                return Asset(symbol,
+                             Decimal(each.get('walletBalance', '0')),
+                             Decimal(each.get('marginBalance', '0')),
+                             Decimal(each.get('availableBalance', '0'))
+                             )
 
     def get_position(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
@@ -269,11 +273,15 @@ class BinanceCoinFuturesApi(FuturesApi):
             type=OrderType('STOP')
         )
 
-    def available_balance(self, symbol: str) -> Decimal:
+    def account_balance(self, symbol: str) -> Asset:
         rv = self.client.coin_futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:
-                return Decimal(each.get('availableBalance', '0'))
+                return Asset(symbol,
+                             Decimal(each.get('walletBalance', '0')),
+                             Decimal(each.get('marginBalance', '0')),
+                             Decimal(each.get('availableBalance', '0'))
+                             )
 
     def coin_futures_account(self):
         return self.client.coin_futures_account()

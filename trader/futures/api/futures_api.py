@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from decimal import Decimal
 
-from trader.futures.types import ContractPair
+from trader.futures.types import ContractPair, Asset
 from trader.futures.types.order_types import OrderSide, PositionSide, TimeInForce
 
 
@@ -29,7 +29,7 @@ class FuturesApi(metaclass=ABCMeta):
         """"""
 
     @abstractmethod
-    def available_balance(self, symbol: str) -> Decimal:
+    def account_balance(self, symbol: str) -> Asset:
         """"""
 
     @abstractmethod
