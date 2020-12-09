@@ -1,10 +1,7 @@
-from collections import defaultdict
 from decimal import Decimal
 from typing import List
 
-
 # 数列生成函数
-from trader.strategy.grid.grid_generators import KBar, VolumeProfile
 
 
 def create_geometric_sequence(size: int, common_ratio: float = 2) -> list:
@@ -58,14 +55,3 @@ def grid_prices(low: Decimal, high: Decimal, grid: list) -> List[Decimal]:
         sub_total += Decimal(g)
         prices.append(low + (high - low) * (sub_total / total))
     return prices
-
-
-def create_volume_profile(kline: List[KBar]) -> VolumeProfile:
-    """
-    创建volume profile
-    """
-    price_dict = defaultdict(Decimal)
-    for bar in kline:
-        p = (bar.close + bar.low + bar.high) / 3
-        price_dict[p] += bar.vol
-    return VolumeProfile(price_dict)

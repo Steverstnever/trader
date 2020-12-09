@@ -1,13 +1,12 @@
 import math
-import time
+import datetime
 import random
 from decimal import Decimal
 
 import pytest
 
 from trader.strategy.grid.grid_generators import ArithmeticGridGenerator, GeometricGridGenerator, MixedGridGenerator, \
-    assert_grid_levels, KBar, VolumeGridGenerator
-from trader.strategy.grid.grid_utils import create_volume_profile
+    assert_grid_levels, Bar, VolumeGridGenerator, VolumeProfile
 from trader.strategy.grid.grid_position_manager import Level, LevelPositionError, GridPositionManager
 from trader.utils import is_constant
 
@@ -199,11 +198,11 @@ def test_volume_profile_grid():
         open_ = random.uniform(low, high)
         close = random.uniform(low, high)
         vol = random.uniform(1, 300)
-        k_line.append(KBar(id_=str(time.time()), open=Decimal(open_),
-                           close=Decimal(close), high=Decimal(high),
-                           low=Decimal(low),
-                           vol=Decimal(vol)))
+        k_line.append(Bar(time=datetime.datetime.now(), open=Decimal(open_),
+                          close=Decimal(close), high=Decimal(high),
+                          low=Decimal(low),
+                          volume=Decimal(vol)))
     g = VolumeGridGenerator(Decimal("50.0001"), Decimal("257.02"), 10,
-                            Decimal("200"), create_volume_profile(k_line))
+                            Decimal("200"), VolumeProfile.create_volume_profile(k_line))
     for level in g.generate():
         print(level)

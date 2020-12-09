@@ -4,9 +4,11 @@ from abc import ABC
 from decimal import Decimal
 from pathlib import Path
 from typing import List, Dict
+from collections import defaultdict
 from dataclasses import dataclass
 
 from trader.strategy.grid.grid_position_manager import GridGenerator, Level
+from trader.spot.types.kline import Bar
 from trader.utils import is_descending
 
 
@@ -155,16 +157,6 @@ class ConfigGridGenerator(GridGenerator):
 
 
 @dataclass
-class KBar:
-    id_: str
-    open: Decimal
-    close: Decimal
-    low: Decimal
-    high: Decimal
-    vol: Decimal  # 以资产币种计算的量
-
-
-@dataclass
 class VolumeProfile:
     items: Dict[Decimal, Decimal]
 
@@ -177,6 +169,17 @@ class VolumeProfile:
 
     def copy(self, high_price: Decimal, low_price: Decimal) -> 'VolumeProfile':
         return VolumeProfile({k: v for k, v in self.items.items() if high_price >= k >= low_price})
+
+    @classmethod
+    def create_volume_profile(cls, kline: List[Bar]) -> 'VolumeProfile':
+        """
+        创建volume profile
+        """
+        price_dict = defaultdict(Decimal)
+        for bar in kline:
+            p = (bar.close + bar.low + bar.high) / 3
+            price_dict[p] += bar.volume
+        return cls(price_dict)
 
 
 class VolumeGridGenerator(GridGenerator):
