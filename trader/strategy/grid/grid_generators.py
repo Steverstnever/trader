@@ -3,9 +3,12 @@ import math
 from abc import ABC
 from decimal import Decimal
 from pathlib import Path
-from typing import List
+from typing import List, Dict
+from collections import defaultdict
+from dataclasses import dataclass
 
 from trader.strategy.grid.grid_position_manager import GridGenerator, Level
+from trader.spot.types.kline import Bar
 from trader.utils import is_descending
 
 
@@ -151,3 +154,60 @@ class ConfigGridGenerator(GridGenerator):
 
     def description(self) -> str:
         return f"自定义配置网格：从 {self.config_path} 装载网格配置"
+
+
+@dataclass
+class VolumeProfile:
+    items: Dict[Decimal, Decimal]
+
+    @property
+    def total_volume(self):
+        return sum(self.items.values())
+
+    def filter(self, high_price: Decimal, low_price: Decimal):
+        self.items = {k: v for k, v in self.items.items() if high_price >= k >= low_price}
+
+    def copy(self, high_price: Decimal, low_price: Decimal) -> 'VolumeProfile':
+        return VolumeProfile({k: v for k, v in self.items.items() if high_price >= k >= low_price})
+
+    @classmethod
+    def create_volume_profile(cls, kline: List[Bar]) -> 'VolumeProfile':
+        """
+        创建volume profile
+        """
+        price_dict = defaultdict(Decimal)
+        for bar in kline:
+            p = (bar.close + bar.low + bar.high) / 3
+            price_dict[p] += bar.volume
+        return cls(price_dict)
+
+
+class VolumeGridGenerator(GridGenerator):
+    def __init__(self, support_price: Decimal,
+                 resistance_price: Decimal,
+                 number_of_levels: int,
+                 total_position: Decimal,
+                 volume_profile: VolumeProfile):
+        self.support_price = support_price
+        self.resistance_price = resistance_price
+        self.number_of_levels = number_of_levels
+        self.total_position = total_position
+        volume_profile.filter(self.resistance_price, self.support_price)
+        self.vol_profile = volume_profile
+
+    def generate(self) -> List[Level]:
+        level_price_gap = (self.resistance_price - self.support_price) / self.number_of_levels
+        result: List[Level] = []
+        high_price = self.resistance_price
+        while high_price > self.support_price:
+            low_price = high_price - level_price_gap
+            child_vp = self.vol_profile.copy(high_price, low_price).total_volume
+            position_proportion = child_vp / self.vol_profile.total_volume
+            result.append(Level(low_price, high_price, self.total_position * position_proportion))
+            high_price = low_price
+        assert_grid_levels(result)
+        return result
+
+    def description(self) -> str:
+        return f"成交量剖面网格 [支撑位 {self.support_price}, 阻力位 {self.resistance_price}, " \
+               f"网格数 {self.number_of_levels}] "

@@ -1,8 +1,8 @@
 from decimal import Decimal
 from typing import List
 
-
 # 数列生成函数
+
 
 def create_geometric_sequence(size: int, common_ratio: float = 2) -> list:
     """创建等比数列"""
