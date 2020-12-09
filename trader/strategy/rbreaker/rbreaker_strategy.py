@@ -5,14 +5,16 @@ from decimal import Decimal
 from pathlib import Path
 from enum import Enum
 
+from trader.credentials import Credentials
+from trader.futures.api.binance_futures_api import BinanceCoinFuturesApi
 from trader.futures.api.futures_api import FuturesApi
-from trader.futures.types import ContractPair, Bar, Kline, PositionSide
+from trader.futures.types import ContractPair, Bar, PositionSide
 from trader.notifier import Notifier, LoggerNotifier
-from trader.spot.api.exchange import Exchange
 from trader.store import StrategyStore
-from trader.strategy.base import Strategy, StrategyEvent, StrategyContext
+from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
 from trader.strategy.rbreaker.rbreaker_strategy_adapter import RBreakerStrategyAdapter
 from trader.strategy.runner.timer import TimerEvent, TimerRunner
+from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
 
 
 logger = logging.getLogger('r-breaker')
@@ -43,7 +45,6 @@ class RBreakerStrategyContext(StrategyContext):
 
 @dataclass
 class RBreakerConfig:
-    exchange: Exchange
     contract_pair: ContractPair
     kline_interval: str
     do_chain_window_size: int
@@ -238,3 +239,16 @@ def safely_run(name: str, f: callable, *args, **kwargs):
         return f(*args, **kwargs)
     except Exception as e:
         logger.error(f"【安全退出】{name}时发生异常：", e)
+
+
+class GridStrategyApp(StrategyApp):
+    def __init__(self, config: RBreakerConfig, credentials: Credentials):
+        notifier = LoggerNotifier()
+        store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO: 配置
+        context = RBreakerStrategyContext(notifier=notifier, store=store)
+        futures_api = BinanceCoinFuturesApi(credentials=credentials)
+        strategy = RBreakerStrategy(config, context, futures_api)
+        runner = TimerRunner(strategy)
+        for time_id in RBreakerTimerIds:
+            runner.add_timer(time_id, time_id.value)
+        super().__init__(strategy, runner)
