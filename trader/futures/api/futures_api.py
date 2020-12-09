@@ -29,7 +29,7 @@ class FuturesApi(metaclass=ABCMeta):
         """"""
 
     @abstractmethod
-    def account_balance(self, symbol: str) -> Decimal:
+    def available_balance(self, symbol: str) -> Decimal:
         """"""
 
     @abstractmethod

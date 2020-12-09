@@ -63,17 +63,6 @@ class RBreakerConfig:
         """"""
 
 
-class Reporter:
-    def __init__(self, futures_api):
-        self.futures_api = futures_api
-
-    def show_position(self, contract_pair: ContractPair):
-        """"""
-
-    def show_asset_position(self, contract_pair: ContractPair):
-        """"""
-
-
 def get_do_chain_value(kline):
     """计算唐奇安通道值"""
     tend_high = max([item.high for item in kline])
@@ -104,7 +93,6 @@ class RBreakerStrategy(Strategy):
         self.config: RBreakerConfig = conf
         self.contract_pair = conf.contract_pair
         self.instrument_info = self.adapter.get_instrument_info(self.contract_pair)
-        self.reporter = Reporter(futures_api)
         self.adapter = RBreakerStrategyAdapter(futures_api,
                                                order_query_interval=self.config.order_query_interval,
                                                order_cancel_timeout=self.config.order_cancel_timeout)
@@ -142,15 +130,18 @@ class RBreakerStrategy(Strategy):
         kline = self.adapter.klines(self.contract_pair, self.config.kline_interval,
                                     limit=self.config.do_chain_window_size)
         bar, new_bar = kline[-2], kline[-1]
-        position = self.get_position()
         logger.info('open_time: ' + str(bar.open_time) +
                     '|open_price: ' + str(self.instrument_info.quantize_price(bar.open_price)) +
                     '|high: ' + str(self.instrument_info.quantize_price(bar.high)) +
                     '|low: ' + str(self.instrument_info.quantize_price(bar.low)) +
                     '|close_price: ' + str(self.instrument_info.quantize_price(bar.close_price))
                     )
-        self.reporter.show_position(self.contract_pair)
-        self.reporter.show_asset_position(self.contract_pair)
+        position = self.get_position()
+        if position:
+            logger.info(f"当前持仓: {position}")
+
+        # self.reporter.show_position(self.contract_pair)
+        # self.reporter.show_asset_position(self.contract_pair)
         self.adapter.cancel_all_orders(self.contract_pair)
         if bar.open_time.day == new_bar.open_time.day:
             self.day_close = new_bar.close_price
@@ -225,5 +216,23 @@ class RBreakerStrategy(Strategy):
             elif event.timer_id == RBreakerTimerIds.SAVE_ACCOUNT_SNAPSHOT:
                 self.handle_save_account_snapshot()
 
+    def handle_save_trades(self):
+        """"""
+
+    def handle_save_account_snapshot(self):
+        """"""
+
     def handle_safely_quit(self):
-        pass
+        safely_run('取消所有未完成订单', self.adapter.cancel_all_orders, self.contract_pair)
+        safely_run('保存最新交易记录', self.handle_save_trades)
+        safely_run('保存账户快照', self.handle_save_account_snapshot)
+
+    def handle_exception(self, e: Exception, event: StrategyEvent):
+        super().handle_exception(e, event=event)
+
+
+def safely_run(name: str, f: callable, *args, **kwargs):
+    try:
+        return f(*args, **kwargs)
+    except Exception as e:
+        logger.error(f"【安全退出】{name}时发生异常：", e)

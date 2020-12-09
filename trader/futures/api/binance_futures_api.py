@@ -145,7 +145,7 @@ class BinanceUSDTFuturesApi(FuturesApi):
         kwargs['symbol'] = self._contract_pair_to_symbol(contract_pair)
         self.client.futures_cancel_all_open_orders(**kwargs)
 
-    def account_balance(self, symbol: str) -> Decimal:
+    def available_balance(self, symbol: str) -> Decimal:
         rv = self.client.futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:
@@ -269,7 +269,7 @@ class BinanceCoinFuturesApi(FuturesApi):
             type=OrderType('STOP')
         )
 
-    def account_balance(self, symbol: str):
+    def available_balance(self, symbol: str) -> Decimal:
         rv = self.client.coin_futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:

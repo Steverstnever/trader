@@ -1,11 +1,16 @@
 import time
 from datetime import timedelta, datetime
 from decimal import Decimal
+import logging
 
 from trader.futures.api.futures_api import FuturesApi
 from trader.futures.order_executor import OrderExecutor
 from trader.futures.types import OrderSide, ContractPair, PositionSide
 from trader.futures.types.order_types import Order, TimeInForce
+from trader.third_party.binance.exceptions import BinanceAPIException
+
+
+logger = logging.getLogger(__name__)
 
 
 class StopWatch:
@@ -74,5 +79,10 @@ class StopGtcOrderExecutor(OrderExecutor):
                                                          client_order_id=client_order_id,
                                                          order_id=order.order_id)
             return order
+        except BinanceAPIException as e:
+            if e.code == -2011:  # unknown order
+                logger.debug('超市取消订单，订单不存在')
+            else:
+                raise e
         except Exception as e:
             raise OrderNotCancelledError(order, e)
