@@ -10,7 +10,7 @@ from trader.futures.data_provider import InstrumentInfoProvider
 from trader.futures.order_executor import OrderExecutorProvider, OrderExecutor
 from trader.futures.order_executor.stop_gtc_order_executor import StopGtcOrderExecutor
 from trader.futures.trade_provider import TradeProvider
-from trader.futures.types import ContractPair, FuturesInstrumentInfo
+from trader.futures.types import ContractPair, FuturesInstrumentInfo, Asset
 from trader.spot.types import CoinPair, Trade
 
 logger = logging.getLogger("future-trading")
@@ -61,8 +61,8 @@ class RBreakerStrategyAdapter(AccountProvider, OrderExecutorProvider, Instrument
     def cancel_all_orders(self, contract_pair: ContractPair):
         return self.futures_api.cancel_all(contract_pair)
 
-    def get_balance_by_symbol(self, asset_symbol: str):
-        return self.futures_api.get_balance_by_symbol(asset_symbol)
+    def get_asset_by_symbol(self, asset_symbol: str) -> Asset:
+        return self.futures_api.get_asset_by_symbol(asset_symbol)
 
     def klines(self, contract_pair: ContractPair, interval: str, **kwargs):
         return self.futures_api.klines(contract_pair, interval, **kwargs)

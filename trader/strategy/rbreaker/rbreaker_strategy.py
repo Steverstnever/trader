@@ -91,7 +91,7 @@ class RBreakerStrategy(Strategy):
         self.intra_trade_high = 0
 
         self.config: RBreakerConfig = conf
-        self.contract_pair = conf.contract_pair
+        self.contract_pair: ContractPair = conf.contract_pair
         self.instrument_info = self.adapter.get_instrument_info(self.contract_pair)
         self.adapter = RBreakerStrategyAdapter(futures_api,
                                                order_query_interval=self.config.order_query_interval,
@@ -139,9 +139,11 @@ class RBreakerStrategy(Strategy):
         position = self.get_position()
         if position:
             logger.info(f"当前持仓: {position}")
+        asset = self.adapter.get_asset_by_symbol(self.contract_pair.cash_symbol)
+        logger.info(f"|{asset.asset_symbol}｜账户余额:{asset.wallet_balance}"
+                    f"|保证金余额:{asset.margin_balance}"
+                    f"|可用余额:{asset.available_balance}|")
 
-        # self.reporter.show_position(self.contract_pair)
-        # self.reporter.show_asset_position(self.contract_pair)
         self.adapter.cancel_all_orders(self.contract_pair)
         if bar.open_time.day == new_bar.open_time.day:
             self.day_close = new_bar.close_price

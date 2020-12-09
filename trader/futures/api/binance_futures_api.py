@@ -51,12 +51,6 @@ class BinanceUSDTFuturesApi(FuturesApi):
         symbol = self._contract_pair_to_symbol(contract_pair)
         return self.client.futures_cancel_all_open_orders(symbol=symbol)
 
-    def get_balance_by_symbol(self, asset_symbol: str) -> Decimal:
-        rv = self.client.futures_account()
-        for each in rv['assets']:
-            if each['asset'] == asset_symbol:
-                return Decimal(each.get('availableBalance', '0'))
-
     def get_instrument_info(self, contract_pair: ContractPair):
         rv = self.client.futures_exchange_info()
         symbol = self._contract_pair_to_symbol(contract_pair)
@@ -145,7 +139,7 @@ class BinanceUSDTFuturesApi(FuturesApi):
         kwargs['symbol'] = self._contract_pair_to_symbol(contract_pair)
         self.client.futures_cancel_all_open_orders(**kwargs)
 
-    def account_balance(self, symbol: str) -> Asset:
+    def get_asset_by_symbol(self, symbol: str) -> Asset:
         rv = self.client.futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:
@@ -273,7 +267,7 @@ class BinanceCoinFuturesApi(FuturesApi):
             type=OrderType('STOP')
         )
 
-    def account_balance(self, symbol: str) -> Asset:
+    def get_asset_by_symbol(self, symbol: str) -> Asset:
         rv = self.client.coin_futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:
@@ -350,9 +344,3 @@ class BinanceCoinFuturesApi(FuturesApi):
     def cancel_all(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
         return self.client.futures_cancel_all_open_orders(symbol=symbol)
-
-    def get_balance_by_symbol(self, asset_symbol: str) -> Decimal:
-        rv = self.client.coin_futures_account()
-        for each in rv['assets']:
-            if each['asset'] == asset_symbol:
-                return Decimal(each.get('availableBalance', '0'))

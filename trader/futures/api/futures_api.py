@@ -29,10 +29,6 @@ class FuturesApi(metaclass=ABCMeta):
         """"""
 
     @abstractmethod
-    def account_balance(self, symbol: str) -> Asset:
-        """"""
-
-    @abstractmethod
     def get_position(self, contract_pair: ContractPair):
         """"""
 
@@ -53,7 +49,7 @@ class FuturesApi(metaclass=ABCMeta):
         """"""
 
     @abstractmethod
-    def get_balance_by_symbol(self, asset_symbol: str) -> Decimal:
+    def get_asset_by_symbol(self, asset_symbol: str) -> Asset:
         """"""
 
     @abstractmethod
