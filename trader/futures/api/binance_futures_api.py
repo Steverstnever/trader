@@ -8,7 +8,7 @@ from trader.futures.api.futures_api import FuturesApi
 from trader.third_party.binance.client import Client
 from trader.futures.types import (
     ContractPair, PerpetualContractPair, DeliveryContractPair, Bar, OrderSide,
-    PositionSide, Order, OrderStatus, OrderType, FuturesInstrumentInfo
+    PositionSide, Order, OrderStatus, OrderType, FuturesInstrumentInfo, Position
 )
 
 
@@ -42,6 +42,10 @@ class BinanceUSDTFuturesApi(FuturesApi):
             return contract_pair.asset_symbol + contract_pair.cash_symbol
         elif isinstance(contract_pair, DeliveryContractPair):  # todo usdt交割合约暂时没有
             """"""
+
+    @classmethod
+    def gen_client_order_id(cls):
+        return str(uuid.uuid4())
 
     def cancel_all(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
@@ -149,7 +153,15 @@ class BinanceUSDTFuturesApi(FuturesApi):
 
     def get_position(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
-        return self.client.futures_position_information(symbol=symbol)
+        rv = self.client.futures_position_information(pair=symbol)
+        position = []
+        for each in rv:
+            amt = Decimal(each['positionAmt'])
+            if amt != 0:
+                p = Position(self.contract_pair, abs(amt), Decimal(rv['entryPrice']), Decimal(rv['markPrice']),
+                             PositionSide(each['positionSide'].lower()))
+                position.append(p)
+        return position
 
     def futures_account(self):
         return self.client.futures_account()
@@ -268,7 +280,7 @@ class BinanceCoinFuturesApi(FuturesApi):
 
     def get_position(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
-        return self.client.coin_futures_position_information(symbol=symbol)
+        return self.client.coin_futures_position_information(pair=symbol)
 
     def delete_all_order(self, contract_pair: ContractPair, **kwargs):
         kwargs['symbol'] = self._contract_pair_to_symbol(contract_pair)

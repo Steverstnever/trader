@@ -14,6 +14,7 @@ class OrderSide(Enum):
 class PositionSide(Enum):
     LONG = 'long'
     SHORT = 'short'
+    BOTH = 'both'
 
 
 class TimeInForce(Enum):

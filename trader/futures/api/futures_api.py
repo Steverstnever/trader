@@ -20,7 +20,8 @@ class FuturesApi(metaclass=ABCMeta):
                           price: Decimal,
                           stop_price: Decimal,
                           qty: Decimal,
-                          tif: TimeInForce):
+                          tif: TimeInForce,
+                          **kwargs):
         """"""
 
     @abstractmethod
@@ -53,4 +54,8 @@ class FuturesApi(metaclass=ABCMeta):
 
     @abstractmethod
     def get_balance_by_symbol(self, asset_symbol: str) -> Decimal:
+        """"""
+
+    @abstractmethod
+    def gen_client_order_id(self):
         """"""

@@ -8,17 +8,26 @@ from trader.spot.types.order_types import Order
 class OrderExecutor(ABC):
 
     @abstractmethod
-    def _place_order(self, client_order_id: str, contract_pair: ContractPair,
+    def _place_order(self, contract_pair: ContractPair,
                      order_side: OrderSide, contract_type: PositionSide, price: Decimal,
-                     stop_price: Decimal, qty: Decimal) -> Order:
+                     stop_price: Decimal, qty: Decimal, **kwargs) -> Order:
         """"""
 
-    def buy(self, contract_pair: ContractPair, price: Decimal, qty: Decimal) -> Order:
+    def short(self, contract_pair: ContractPair, price: Decimal, qty: Decimal, **kwargs) -> Order:
+        """做空"""
+        return self._place_order(contract_pair, OrderSide.SELL, PositionSide.SHORT, price, qty, **kwargs)
 
-        return self._place_order(contract_pair=contract_pair, order_side=OrderSide.BUY, price=price, qty=qty)
+    def buy(self, contract_pair: ContractPair, price: Decimal, qty: Decimal, **kwargs):
+        """做多"""
+        return self._place_order(contract_pair, OrderSide.BUY, PositionSide.SHORT, price, qty, **kwargs)
 
-    def sell(self, contract_pair: ContractPair, price: Decimal, qty: Decimal) -> Order:
-        return self._place_order(contract_pair=contract_pair, order_side=OrderSide.SELL, price=price, qty=qty)
+    def sell(self, contract_pair: ContractPair, price, qty, **kwargs):
+        """平多"""
+        return self._place_order(contract_pair, OrderSide.SELL, PositionSide.LONG, price, qty, **kwargs)
+
+    def cover(self, contract_pair: ContractPair, price, qty, **kwargs):
+        """平空"""
+        return self._place_order(contract_pair, OrderSide.BUY, PositionSide.SHORT, contract_pair, price, qty, **kwargs)
 
 
 class OrderExecutorProvider(ABC):

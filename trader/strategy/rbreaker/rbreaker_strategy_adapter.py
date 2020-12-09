@@ -8,7 +8,7 @@ from trader.futures.account_provider import AccountProvider
 from trader.futures.api.futures_api import FuturesApi
 from trader.futures.data_provider import InstrumentInfoProvider
 from trader.futures.order_executor import OrderExecutorProvider, OrderExecutor
-from trader.futures.order_executor.limit_gtc_order_executor import StopGtcOrderExecutor
+from trader.futures.order_executor.stop_gtc_order_executor import StopGtcOrderExecutor
 from trader.futures.trade_provider import TradeProvider
 from trader.futures.types import ContractPair, FuturesInstrumentInfo
 from trader.spot.types import CoinPair, Trade
@@ -69,6 +69,3 @@ class RBreakerStrategyAdapter(AccountProvider, OrderExecutorProvider, Instrument
 
     def get_position(self, contract_pair: ContractPair):
         return self.futures_api.get_position(contract_pair)
-
-    def show_position(self):
-        """"""

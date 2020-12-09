@@ -8,8 +8,7 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 
-from trader.futures.types import ContractPair, Bar
-from trader.futures.types.kline import Kline
+from trader.futures.types import ContractPair, Bar, Kline, Position, PositionSide
 from trader.credentials import Credentials
 from trader.notifier import Notifier, LoggerNotifier
 from trader.spot.api.exchange import Exchange
@@ -32,9 +31,7 @@ from trader.strategy.base import Strategy
 from trader.futures.api.futures_api import FuturesApi
 
 
-LONG = 'LONG'  # 多单
-SHORT = 'SHORT'  # 空单
-logger = logging.getLogger('rbreak')
+logger = logging.getLogger('r-breaker')
 binance_order_not_exit = -2013
 
 
@@ -283,6 +280,10 @@ class RBreakerStrategy(Strategy):
         self.day_high = today_bar.high
         self.day_close = today_bar.close_price
 
+    def get_position(self):
+        rv = self.adapter.get_position(self.contract_pair)
+        return rv[0]  # todo 目前只考虑单向成交，不考虑多空同时成交
+
     def calculate(self, bar: Bar):
         self.buy_setup = bar.low - self.config.setup_coef * (bar.high - bar.close_price)  # 观察买入价
         self.sell_setup = bar.high + self.config.setup_coef * (bar.close_price - bar.low)  # 观察卖出价
@@ -303,7 +304,7 @@ class RBreakerStrategy(Strategy):
         bar = self.kline.append(new_bar)
         if bar is None:
             return
-        position_side, position_amount = self.adapter.get_position(self.contract_pair)
+        position = self.adapter.get_position(self.contract_pair)
         logger.info('open_time: ' + str(bar.open_time) +
                     '|open_price: ' + str(self.instrument_info.quantize_price(bar.open_price)) +
                     '|high: ' + str(self.instrument_info.quantize_price(bar.high)) +
@@ -331,12 +332,12 @@ class RBreakerStrategy(Strategy):
             self.day_close = new_bar.close_price
             self.day_low = new_bar.low
         tend_high, tend_low, _ = get_do_chain_value(self.kline)
-        if position_side == LONG:
+        if position.position_side == PositionSide.LONG:
             """平多"""
             self.intra_trade_high = max(self.intra_trade_high, bar.high)
             long_stop = self.intra_trade_high * (1 - self.config.trailing_long / 100)
-            self.order_manager.sell(self.config.symbol, long_stop, position_amount)
-        elif position_side == SHORT:
+            self.adapter.get_order_executor().sell(self.config.contract_pair, long_stop, position_amount)
+        elif position.position_side == SHORT:
             """平空"""
             self.intra_trade_low = min(self.intra_trade_low, bar.low)
             short_stop = self.intra_trade_low * (1 + self.config.trailing_short / 100)

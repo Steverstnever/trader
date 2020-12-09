@@ -41,18 +41,19 @@ class StopGtcOrderExecutor(OrderExecutor):
         self.order_query_interval = order_query_interval
         self.order_cancel_timeout = order_cancel_timeout
 
-    def _place_order(self, client_order_id: str, contract_pair: ContractPair,
+    def _place_order(self, contract_pair: ContractPair,
                      order_side: OrderSide, position_side: PositionSide, price: Decimal,
-                     stop_price: Decimal, qty: Decimal) -> Order:
+                     qty: Decimal, **kwargs) -> Order:
         # 下订单
+        client_order_id = self.futures_api.gen_client_order_id()
         order: Order = self.futures_api.create_stop_order(client_order_id=client_order_id,
                                                           contract_pair=contract_pair,
                                                           order_side=order_side,
                                                           position_side=position_side,
                                                           price=price,
-                                                          stop_price=stop_price,
                                                           qty=qty,
-                                                          tif=TimeInForce.GTC)
+                                                          tif=TimeInForce.GTC,
+                                                          **kwargs)
         if order.status.is_completed():
             return order
 
