@@ -5,15 +5,14 @@ from decimal import Decimal
 from pathlib import Path
 from enum import Enum
 
+from trader.futures.api.futures_api import FuturesApi
 from trader.futures.types import ContractPair, Bar, Kline, PositionSide
 from trader.notifier import Notifier, LoggerNotifier
 from trader.spot.api.exchange import Exchange
 from trader.store import StrategyStore
-from trader.strategy.base import StrategyEvent, StrategyContext
+from trader.strategy.base import Strategy, StrategyEvent, StrategyContext
 from trader.strategy.rbreaker.rbreaker_strategy_adapter import RBreakerStrategyAdapter
-
-from trader.strategy.base import Strategy
-from trader.futures.api.futures_api import FuturesApi
+from trader.strategy.runner.timer import TimerEvent, TimerRunner
 
 
 logger = logging.getLogger('r-breaker')
@@ -24,7 +23,7 @@ class RBreakerTimerIds(Enum):
     """
     网格策略用到的 timer-id
     """
-    BOOK_TICKER = timedelta(seconds=60)  # 每个一分钟获取一次k线
+    BAR_TICKER = timedelta(seconds=60)  # 每个一分钟获取一次k线
     SAVE_TRADES = timedelta(seconds=5)  # 每分钟保存一次最新成交记录
     SAVE_ACCOUNT_SNAPSHOT = timedelta(hours=0.5)  # 每半小时存储一下资产情况
 
@@ -104,7 +103,6 @@ class RBreakerStrategy(Strategy):
 
         self.config: RBreakerConfig = conf
         self.contract_pair = conf.contract_pair
-        self.kline = Kline(conf.do_chain_window_size)
         self.instrument_info = self.adapter.get_instrument_info(self.contract_pair)
         self.reporter = Reporter(futures_api)
         self.adapter = RBreakerStrategyAdapter(futures_api,
@@ -112,10 +110,6 @@ class RBreakerStrategy(Strategy):
                                                order_cancel_timeout=self.config.order_cancel_timeout)
 
     def initialize(self):
-        k = self.adapter.klines(self.contract_pair, self.config.kline_interval, limit=self.config.do_chain_window_size)
-        for item in k:
-            self.kline.append(item)
-
         k = self.adapter.klines(self.contract_pair, interval='1d', limit=2)
         last_day_bar, today_bar = k[0], k[1]
         self.calculate(last_day_bar)
@@ -144,10 +138,10 @@ class RBreakerStrategy(Strategy):
                     ' buy_break: ' + str(self.instrument_info.quantize_price(self.buy_break)) +
                     ' sell_break: ' + str(self.instrument_info.quantize_price(self.sell_break)))
 
-    def on_bar(self, new_bar: Bar):
-        bar = self.kline.append(new_bar)
-        if bar is None:
-            return
+    def handle_bar_ticker(self):
+        kline = self.adapter.klines(self.contract_pair, self.config.kline_interval,
+                                    limit=self.config.do_chain_window_size)
+        bar, new_bar = kline[-2], kline[-1]
         position = self.get_position()
         logger.info('open_time: ' + str(bar.open_time) +
                     '|open_price: ' + str(self.instrument_info.quantize_price(bar.open_price)) +
@@ -175,7 +169,7 @@ class RBreakerStrategy(Strategy):
             self.day_high = new_bar.high
             self.day_close = new_bar.close_price
             self.day_low = new_bar.low
-        tend_high, tend_low, _ = get_do_chain_value(self.kline)
+        tend_high, tend_low, _ = get_do_chain_value(kline)
         if position and position.position_side == PositionSide.LONG:
             """平多"""
             self.intra_trade_high = max(self.intra_trade_high, bar.high)
@@ -223,7 +217,13 @@ class RBreakerStrategy(Strategy):
             logger.info(f"当前挂单{current_orders}")
 
     def handle_event(self, event: StrategyEvent):
-        pass
+        if isinstance(event, TimerEvent):
+            if event.timer_id == RBreakerTimerIds.BAR_TICKER:
+                self.handle_bar_ticker()
+            elif event.timer_id == RBreakerTimerIds.SAVE_TRADES:
+                self.handle_save_trades()
+            elif event.timer_id == RBreakerTimerIds.SAVE_ACCOUNT_SNAPSHOT:
+                self.handle_save_account_snapshot()
 
     def handle_safely_quit(self):
         pass
