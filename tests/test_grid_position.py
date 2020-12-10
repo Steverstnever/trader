@@ -1,10 +1,12 @@
 import math
+import datetime
+import random
 from decimal import Decimal
 
 import pytest
 
 from trader.strategy.grid.grid_generators import ArithmeticGridGenerator, GeometricGridGenerator, MixedGridGenerator, \
-    assert_grid_levels
+    assert_grid_levels, Bar, VolumeGridGenerator, VolumeProfile
 from trader.strategy.grid.grid_position_manager import Level, LevelPositionError, GridPositionManager
 from trader.utils import is_constant
 
@@ -186,3 +188,27 @@ def test_grid_manager():
     assert grid.get_positions_to_buy(current_price=Decimal('1.5')) == Decimal('5')
     assert grid.get_positions_to_buy(current_price=Decimal('2.5')) == Decimal('0')
     assert grid.get_positions_to_buy(current_price=Decimal('3.5')) == Decimal('0')
+
+
+def test_volume_profile_grid():
+    k_line = list()
+    for i in range(101):
+        low = i + 4
+        high = i + 6
+        open_ = random.uniform(low, high)
+        close = i + 5
+        vol = 100
+        k_line.append(Bar(time=datetime.datetime.now(), open=Decimal(open_),
+                          close=Decimal(close), high=Decimal(high),
+                          low=Decimal(low),
+                          volume=Decimal(vol)))
+    vp = VolumeProfile.create_volume_profile(k_line)
+    g = VolumeGridGenerator(Decimal("5"), Decimal("105"), 5,
+                            Decimal("200"), vp)
+    assert len(g.generate()) <= 5
+
+    position_m = GridPositionManager(g, level_min_profit=0.05)
+    for i in g.generate():
+        print(i)
+    assert position_m.get_positions_to_buy(Decimal("80")) == Decimal("200"), position_m.get_positions_to_buy(Decimal("80"))
+    assert position_m.get_positions_to_buy(Decimal("30")) == Decimal("600"), position_m.get_positions_to_buy(Decimal("30"))

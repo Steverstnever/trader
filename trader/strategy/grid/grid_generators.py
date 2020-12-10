@@ -3,9 +3,12 @@ import math
 from abc import ABC
 from decimal import Decimal
 from pathlib import Path
-from typing import List
+from typing import List, Dict
+from collections import defaultdict
+from dataclasses import dataclass
 
 from trader.strategy.grid.grid_position_manager import GridGenerator, Level
+from trader.spot.types.kline import Bar
 from trader.utils import is_descending
 
 
@@ -151,3 +154,81 @@ class ConfigGridGenerator(GridGenerator):
 
     def description(self) -> str:
         return f"自定义配置网格：从 {self.config_path} 装载网格配置"
+
+
+@dataclass
+class VolumeProfile:
+    """
+    k线成交量剖面
+    use example:
+        for price, volume in volume_profile.items():
+            print(price, volume)
+        volume_profile 是倒序排列
+    """
+    items: Dict[Decimal, Decimal]
+
+    @property
+    def highest_price(self):
+        return max(self.items.keys())
+
+    @property
+    def lowest_price(self):
+        return min(self.items.keys())
+
+    @property
+    def total_volume(self):
+        return sum(self.items.values())
+
+    def partial_copy(self, high_price: Decimal, low_price: Decimal) -> 'VolumeProfile':
+        """
+        部分拷贝
+        """
+        return VolumeProfile({price: vol for price, vol in self.items.items() if low_price <= price <= high_price})
+
+    @classmethod
+    def create_volume_profile(cls, kline: List[Bar]) -> 'VolumeProfile':
+        """
+        创建volume profile
+        """
+        d_dict = defaultdict(Decimal)
+        for bar in kline:
+            p = (bar.close + bar.low + bar.high) / 3
+            d_dict[p] += bar.volume
+        return cls(d_dict)
+
+    def __iter__(self):
+        return sorted([(p, v) for p, v in self.items.items()], reverse=True).__iter__()
+
+
+class VolumeGridGenerator(GridGenerator):
+    def __init__(self, support_price: Decimal,
+                 resistance_price: Decimal,
+                 number_of_levels: int,
+                 max_position_per_level: Decimal,
+                 volume_profile: VolumeProfile):
+        self.support_price = support_price
+        self.resistance_price = resistance_price
+        self.number_of_levels = number_of_levels
+        self.max_position_per_level = max_position_per_level
+        self.vol_profile = volume_profile.partial_copy(self.resistance_price, self.support_price)
+
+    def generate(self) -> List[Level]:
+        level_volume_gap = self.vol_profile.total_volume / self.number_of_levels
+        result: List[Level] = []
+        high_price = self.vol_profile.highest_price
+        count_volume = Decimal()
+        for price, volume in self.vol_profile:
+            count_volume += volume
+            if count_volume >= level_volume_gap:
+                result.append(Level(price, high_price, self.max_position_per_level))
+                count_volume -= level_volume_gap
+                high_price = price
+            # 避免high_price == low_price 的level生成
+            while count_volume >= level_volume_gap:
+                count_volume -= level_volume_gap
+        assert_grid_levels(result)
+        return result
+
+    def description(self) -> str:
+        return f"成交量剖面网格 [支撑位 {self.support_price}, 阻力位 {self.resistance_price}, " \
+               f"网格数 {self.number_of_levels}] "
