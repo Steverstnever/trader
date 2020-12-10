@@ -1,15 +1,16 @@
+import json
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
 
 from trader.credentials import Credentials
-from trader.futures.api.binance_futures_api import BinanceCoinFuturesApi
 from trader.futures.api.futures_api import FuturesApi
-from trader.futures.types import ContractPair, Bar, PositionSide
+from trader.futures.types import Bar, ContractPair, DeliveryContractPair, PerpetualContractPair, PositionSide
 from trader.notifier import Notifier, LoggerNotifier
+from trader.futures.api.exchange import Exchange, exchange_map
 from trader.store import StrategyStore
 from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
 from trader.strategy.rbreaker.rbreaker_strategy_adapter import RBreakerStrategyAdapter
@@ -45,6 +46,7 @@ class RBreakerStrategyContext(StrategyContext):
 
 @dataclass
 class RBreakerConfig:
+    exchange: Exchange
     contract_pair: ContractPair
     kline_interval: str
     do_chain_window_size: int
@@ -61,7 +63,30 @@ class RBreakerConfig:
 
     @classmethod
     def load_from_json(cls, path: Path):
-        """"""
+        with path.open() as f:
+            conf = json.load(f)
+        asset, cash, delivery_time = conf['asset'], conf['cash'], conf['delivery_time']
+        if delivery_time == 'PERP':  # 永续合约
+            contract_pair = PerpetualContractPair(asset, cash)
+        else:
+            contract_pair = DeliveryContractPair(asset, cash, int(delivery_time))
+
+        return RBreakerConfig(
+            exchange=exchange_map[conf['exchange']],
+            contract_pair=contract_pair,
+            kline_interval=conf['kline_interval'],
+            do_chain_window_size=conf['do_chain_window_size'],
+            setup_coef=Decimal(conf['setup_coef']),
+            enter_coef_1=Decimal(conf['enter_coef_1']),
+            enter_coef_2=Decimal(conf['enter_coef_2']),
+            break_coef=Decimal(conf['break_coef']),
+            multiplier=Decimal(conf['multiplier']),
+            fixed_size=Decimal(conf['fixed_size']),
+            trailing_long=Decimal(conf['trailing_long']),
+            trailing_short=Decimal(conf['trailing_short']),
+            order_query_interval=timedelta(seconds=conf['order_query_interval']),
+            order_cancel_timeout=timedelta(seconds=conf['order_cancel_timeout'])
+        )
 
 
 def get_do_chain_value(kline):
@@ -93,10 +118,10 @@ class RBreakerStrategy(Strategy):
 
         self.config: RBreakerConfig = conf
         self.contract_pair: ContractPair = conf.contract_pair
-        self.instrument_info = self.adapter.get_instrument_info(self.contract_pair)
         self.adapter = RBreakerStrategyAdapter(futures_api,
                                                order_query_interval=self.config.order_query_interval,
                                                order_cancel_timeout=self.config.order_cancel_timeout)
+        self.instrument_info = self.adapter.get_instrument_info(self.contract_pair)
 
     def initialize(self):
         k = self.adapter.klines(self.contract_pair, interval='1d', limit=2)
@@ -241,12 +266,12 @@ def safely_run(name: str, f: callable, *args, **kwargs):
         logger.error(f"【安全退出】{name}时发生异常：", e)
 
 
-class GridStrategyApp(StrategyApp):
+class RBreakerStrategyApp(StrategyApp):
     def __init__(self, config: RBreakerConfig, credentials: Credentials):
         notifier = LoggerNotifier()
         store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO: 配置
         context = RBreakerStrategyContext(notifier=notifier, store=store)
-        futures_api = BinanceCoinFuturesApi(credentials=credentials)
+        futures_api = config.exchange.create_coin_future_api(credentials=credentials)
         strategy = RBreakerStrategy(config, context, futures_api)
         runner = TimerRunner(strategy)
         for time_id in RBreakerTimerIds:

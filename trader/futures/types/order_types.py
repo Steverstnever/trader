@@ -4,17 +4,12 @@ from decimal import Decimal
 from enum import Enum
 
 from .symbol import ContractPair
+from .position import PositionSide
 
 
 class OrderSide(Enum):
     BUY = 'buy'
     SELL = 'sell'
-
-
-class PositionSide(Enum):
-    LONG = 'long'
-    SHORT = 'short'
-    BOTH = 'both'
 
 
 class TimeInForce(Enum):

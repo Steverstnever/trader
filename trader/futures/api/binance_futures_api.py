@@ -23,11 +23,11 @@ def parse_binance_kline(data):
     volume = data[5]
     start_time = datetime.fromtimestamp(data[0] / 1000)
     return Bar(open_time=start_time,
-               open_price=open_price,
-               close_price=close_price,
-               high=high,
-               low=low,
-               volume=volume)
+               open_price=Decimal(open_price),
+               close_price=Decimal(close_price),
+               high=Decimal(high),
+               low=Decimal(low),
+               volume=Decimal(volume))
 
 
 class BinanceUSDTFuturesApi(FuturesApi):
@@ -139,7 +139,7 @@ class BinanceUSDTFuturesApi(FuturesApi):
         kwargs['symbol'] = self._contract_pair_to_symbol(contract_pair)
         self.client.futures_cancel_all_open_orders(**kwargs)
 
-    def get_asset_by_symbol(self, symbol: str) -> Asset:
+    def get_balance_by_symbol(self, symbol: str) -> Asset:
         rv = self.client.futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:
@@ -267,7 +267,7 @@ class BinanceCoinFuturesApi(FuturesApi):
             type=OrderType('STOP')
         )
 
-    def get_asset_by_symbol(self, symbol: str) -> Asset:
+    def get_balance_by_symbol(self, symbol: str) -> Asset:
         rv = self.client.coin_futures_account()
         for each in rv['assets']:
             if each['asset'] == symbol:

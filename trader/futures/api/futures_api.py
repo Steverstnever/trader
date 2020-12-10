@@ -49,7 +49,7 @@ class FuturesApi(metaclass=ABCMeta):
         """"""
 
     @abstractmethod
-    def get_asset_by_symbol(self, asset_symbol: str) -> Asset:
+    def get_balance_by_symbol(self, asset_symbol: str) -> Asset:
         """"""
 
     @abstractmethod

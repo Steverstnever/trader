@@ -145,3 +145,4 @@ dmypy.json
 cython_debug/
 
 /.custom_grid.json
+.local/rbreaker.json
