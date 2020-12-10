@@ -344,4 +344,4 @@ class BinanceCoinFuturesApi(FuturesApi):
 
     def cancel_all(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
-        return self.client.futures_cancel_all_open_orders(symbol=symbol)
+        return self.client.coin_futures_cancel_all_open_orders(symbol=symbol)

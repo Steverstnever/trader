@@ -145,7 +145,7 @@ class RBreakerStrategy(Strategy):
             symbol = self.contract_pair.asset_symbol
         else:
             symbol = self.contract_pair.cash_symbol
-        return self.adapter.get_balance_by_symbol(symbol)
+        return self.adapter.get_balance_by_symbol(symbol), symbol
 
     def calculate(self, bar: Bar):
         self.buy_setup = bar.low - self.config.setup_coef * (bar.high - bar.close_price)  # 观察买入价
@@ -176,8 +176,8 @@ class RBreakerStrategy(Strategy):
         position = self.get_position()
         if position:
             logger.info(f"当前持仓: {position}")
-        balance = self.get_margin_balance()
-        logger.info(f"|{balance.asset_symbol}｜账户余额:{balance.wallet_balance}"
+        balance, symbol = self.get_margin_balance()
+        logger.info(f"|保证金余额:{balance.wallet_balance}{symbol}"
                     f"|保证金余额:{balance.margin_balance}"
                     f"|可用余额:{balance.available_balance}|")
 
