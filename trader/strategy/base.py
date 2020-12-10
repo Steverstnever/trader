@@ -1,10 +1,13 @@
+import logging
 from abc import ABC, abstractmethod
-
 from requests import RequestException
 
 from trader.notifier import Notifier
 from trader.store import StrategyStore
 from trader.third_party.binance.exceptions import BinanceAPIException
+
+
+logger = logging.getLogger(__name__)
 
 
 class StrategyEvent(ABC):
@@ -77,10 +80,13 @@ class Strategy(ABC):
 
         """
         if isinstance(e, RequestException):
-            self.notifier.notify(f"在处理 {event} 时发生了 requests 相关的网格异常：{e}")
+            logger.exception(e)
+            self.notifier.notify(f"在处理 {event} 时发生了 requests 相关的异常：{e}")
         elif isinstance(e, BinanceAPIException):
-            self.notifier.notify(f"在处理 {event} 时发生了 BinanceAPI 相关的网格异常：{e}")
+            logger.exception(e)
+            self.notifier.notify(f"在处理 {event} 时发生了 BinanceAPI 相关的异常：{e}")
         elif isinstance(e, Exception):
+            logger.exception(e)
             self.notifier.notify(f"在处理 {event} 时发生了未知异常：{e}，策略做退出处理！")
             self.handle_safely_quit()
             raise e

@@ -8,14 +8,16 @@ from pathlib import Path
 
 from trader.credentials import Credentials
 from trader.futures.api.futures_api import FuturesApi
-from trader.futures.types import Bar, ContractPair, DeliveryContractPair, PerpetualContractPair, PositionSide
+from trader.futures.types import (
+    Bar, ContractPair, DeliveryContractPair, PerpetualContractPair, PositionSide, FutureType
+)
 from trader.notifier import Notifier, LoggerNotifier
 from trader.futures.api.exchange import Exchange, exchange_map
 from trader.store import StrategyStore
+from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
 from trader.strategy.base import Strategy, StrategyEvent, StrategyContext, StrategyApp
 from trader.strategy.rbreaker.rbreaker_strategy_adapter import RBreakerStrategyAdapter
 from trader.strategy.runner.timer import TimerEvent, TimerRunner
-from trader.store.sqlalchemy_store import SqlalchemyStrategyStore
 
 
 logger = logging.getLogger('r-breaker')
@@ -47,6 +49,7 @@ class RBreakerStrategyContext(StrategyContext):
 @dataclass
 class RBreakerConfig:
     exchange: Exchange
+    future_type: FutureType
     contract_pair: ContractPair
     kline_interval: str
     do_chain_window_size: int
@@ -73,6 +76,7 @@ class RBreakerConfig:
 
         return RBreakerConfig(
             exchange=exchange_map[conf['exchange']],
+            future_type=FutureType(conf['future_type'].upper()),
             contract_pair=contract_pair,
             kline_interval=conf['kline_interval'],
             do_chain_window_size=conf['do_chain_window_size'],
@@ -136,6 +140,13 @@ class RBreakerStrategy(Strategy):
         rv = self.adapter.get_position(self.contract_pair)
         return rv[0] if rv else None  # todo 目前只考虑单向成交，不考虑多空同时成交
 
+    def get_margin_balance(self):
+        if self.config.future_type == FutureType.COIN:
+            symbol = self.contract_pair.asset_symbol
+        else:
+            symbol = self.contract_pair.cash_symbol
+        return self.adapter.get_balance_by_symbol(symbol)
+
     def calculate(self, bar: Bar):
         self.buy_setup = bar.low - self.config.setup_coef * (bar.high - bar.close_price)  # 观察买入价
         self.sell_setup = bar.high + self.config.setup_coef * (bar.close_price - bar.low)  # 观察卖出价
@@ -165,10 +176,10 @@ class RBreakerStrategy(Strategy):
         position = self.get_position()
         if position:
             logger.info(f"当前持仓: {position}")
-        asset = self.adapter.get_asset_by_symbol(self.contract_pair.cash_symbol)
-        logger.info(f"|{asset.asset_symbol}｜账户余额:{asset.wallet_balance}"
-                    f"|保证金余额:{asset.margin_balance}"
-                    f"|可用余额:{asset.available_balance}|")
+        balance = self.get_margin_balance()
+        logger.info(f"|{balance.asset_symbol}｜账户余额:{balance.wallet_balance}"
+                    f"|保证金余额:{balance.margin_balance}"
+                    f"|可用余额:{balance.available_balance}|")
 
         self.adapter.cancel_all_orders(self.contract_pair)
         if bar.open_time.day == new_bar.open_time.day:
@@ -271,7 +282,11 @@ class RBreakerStrategyApp(StrategyApp):
         notifier = LoggerNotifier()
         store = SqlalchemyStrategyStore("sqlite:///perf.sqlite")  # TODO: 配置
         context = RBreakerStrategyContext(notifier=notifier, store=store)
-        futures_api = config.exchange.create_coin_future_api(credentials=credentials)
+        assert config.future_type in (FutureType.COIN, FutureType.USDT)
+        if config.future_type == FutureType.COIN:
+            futures_api = config.exchange.create_coin_future_api(credentials=credentials)
+        else:
+            futures_api = config.exchange.create_usdt_future_api(credentials=credentials)
         strategy = RBreakerStrategy(config, context, futures_api)
         runner = TimerRunner(strategy)
         for time_id in RBreakerTimerIds:

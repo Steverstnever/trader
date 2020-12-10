@@ -151,7 +151,7 @@ class BinanceUSDTFuturesApi(FuturesApi):
 
     def get_position(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
-        rv = self.client.futures_position_information(pair=symbol)
+        rv = self.client.futures_position_information(symbol=symbol)
         position = []
         for each in rv:
             amt = Decimal(each['positionAmt'])
@@ -282,11 +282,12 @@ class BinanceCoinFuturesApi(FuturesApi):
 
     def get_position(self, contract_pair: ContractPair):
         symbol = self._contract_pair_to_symbol(contract_pair)
-        rv = self.client.coin_futures_position_information(pair=symbol)
+        rv = self.client.coin_futures_position_information(
+            pair=contract_pair.asset_symbol+contract_pair.cash_symbol)
         position = []
         for each in rv:
             amt = Decimal(each['positionAmt'])
-            if amt != 0:
+            if amt != 0 and each['symbol'] == symbol:
                 p = Position(contract_pair, abs(amt), Decimal(rv['entryPrice']), Decimal(rv['markPrice']),
                              PositionSide(each['positionSide'].lower()))
                 position.append(p)

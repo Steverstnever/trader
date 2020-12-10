@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Union, NewType
 
 
@@ -100,3 +101,8 @@ class DeliveryContractPair:
 
 
 ContractPair = NewType('ContractPair', Union[DeliveryContractPair, PerpetualContractPair])
+
+
+class FutureType(Enum):
+    USDT = 'USDT'  # 金本位
+    COIN = 'COIN'  # 币本位
